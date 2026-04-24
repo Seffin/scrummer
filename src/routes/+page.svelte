@@ -5,6 +5,7 @@
 	import TimerPanel from '$lib/components/TimerPanel.svelte';
 	import LogsPanel from '$lib/components/LogsPanel.svelte';
 	import ReportsPanel from '$lib/components/ReportsPanel.svelte';
+	import GithubIssuesPanel from '$lib/components/GithubIssuesPanel.svelte';
 
 	let activeTab = $state('timer');
 
@@ -40,6 +41,8 @@
 						Work History
 					{:else if activeTab === 'reports'}
 						Analytics
+					{:else if activeTab === 'github'}
+						GitHub Tracking
 					{/if}
 				</h1>
 				<p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -49,6 +52,8 @@
 						Review your completed work sessions.
 					{:else if activeTab === 'reports'}
 						Analyze your time distribution.
+					{:else if activeTab === 'github'}
+						Load GitHub issues, start timers from issues, and create new backlog items.
 					{/if}
 				</p>
 			</div>
@@ -60,6 +65,8 @@
 				<LogsPanel />
 			{:else if activeTab === 'reports'}
 				<ReportsPanel />
+			{:else if activeTab === 'github'}
+				<GithubIssuesPanel />
 			{/if}
 		</main>
 	</div>

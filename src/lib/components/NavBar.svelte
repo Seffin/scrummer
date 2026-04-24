@@ -6,7 +6,8 @@
 	const navItems = [
 		{ id: 'timer',   label: 'Timer',   icon: '⏱' },
 		{ id: 'logs',    label: 'Logs',    icon: '📋' },
-		{ id: 'reports', label: 'Reports', icon: '📊' }
+		{ id: 'reports', label: 'Reports', icon: '📊' },
+		{ id: 'github',  label: 'GitHub',  icon: '🐙' }
 	];
 </script>
 

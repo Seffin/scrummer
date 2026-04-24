@@ -26,6 +26,12 @@ export interface ActiveTimer {
 	running: boolean;
 }
 
+export interface GithubIssueRef {
+	number: number;
+	title: string;
+	url?: string;
+}
+
 export interface TrackerState {
 	sessions: WorkSession[];
 	activeTimers: ActiveTimer[];
@@ -231,6 +237,12 @@ function createTracker() {
 		state.activeTimers = [...state.activeTimers, newTimer];
 		startInterval();
 		persist();
+	}
+
+	function startTimerFromGithubIssue(issue: GithubIssueRef, assignee?: string) {
+		const user = assignee?.trim() || state.currentUser;
+		const taskTitle = `#${issue.number} ${issue.title}`.trim();
+		startTimer('GitHub', 'Issues', taskTitle, user);
 	}
 
 	function addPendingTask(client: string, project: string, task: string, assignee: string) {
@@ -505,6 +517,7 @@ function createTracker() {
 		addTask,
 		getTasks,
 		startTimer,
+		startTimerFromGithubIssue,
 		addPendingTask,
 		pauseTimer,
 		resumeTimer,
