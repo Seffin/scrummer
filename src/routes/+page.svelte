@@ -8,10 +8,20 @@
 	import GithubIssuesPanel from '$lib/components/GithubIssuesPanel.svelte';
 
 	let activeTab = $state('timer');
+	const TAB_KEY = 'worktrack_active_tab';
 
 	onMount(() => {
+		// Load persisted tab
+		const savedTab = localStorage.getItem(TAB_KEY);
+		if (savedTab) activeTab = savedTab;
+
 		// Initialize the tracker state (loads from localStorage)
 		tracker.init();
+	});
+
+	$effect(() => {
+		// Persist tab on change
+		localStorage.setItem(TAB_KEY, activeTab);
 	});
 
 	onDestroy(() => {

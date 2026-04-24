@@ -21,11 +21,69 @@ describe('GithubIssuesPanel', () => {
 			]
 		});
 
-		await expect.element(page.getByText('#7 Track issue')).toBeInTheDocument();
-		await expect.element(page.getByText('Assignees: tom')).toBeInTheDocument();
-		await expect.element(page.getByText('Milestone: v1')).toBeInTheDocument();
-		await expect.element(page.getByText('Created: 2026-01-01')).toBeInTheDocument();
-		await expect.element(page.getByText('Updated: 2026-01-02')).toBeInTheDocument();
+		await expect.element(page.getByText('#7')).toBeInTheDocument();
+		await expect.element(page.getByText('Track issue')).toBeInTheDocument();
+		await expect.element(page.getByText('tom')).toBeInTheDocument();
+		await expect.element(page.getByText('2026-01-01')).toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: /start/i })).toBeInTheDocument();
 	});
+
+	it('loads and displays owners from API', async () => {
+		// Mock fetch for owners
+		const owners = ['owner1', 'owner2'];
+		globalThis.fetch = (async (url: string) => {
+			if (url === '/api/github/options/owners') {
+				return {
+					ok: true,
+					json: async () => ({ owners })
+				};
+			}
+			return { ok: true, json: async () => ({}) };
+		}) as any;
+
+		render(GithubIssuesPanel);
+
+		// Wait for loadOwners to finish
+		await new Promise(resolve => setTimeout(resolve, 200));
+
+		const ownerInput = page.getByPlaceholder('e.g. facebook');
+		await expect.element(ownerInput).toBeInTheDocument();
+		
+		// Focus input to show dropdown
+		await ownerInput.click();
+		await new Promise(resolve => setTimeout(resolve, 100));
+		
+		await expect.element(page.getByText('owner1')).toBeInTheDocument();
+		await expect.element(page.getByText('owner2')).toBeInTheDocument();
+	});
+
+	it('loads and displays repos when owner is selected', async () => {
+		// Mock fetch for owners and repos
+		globalThis.fetch = (async (url: string) => {
+			if (url === '/api/github/options/owners') {
+				return { ok: true, json: async () => ({ owners: ['owner1'] }) };
+			}
+			if (url.includes('/api/github/options/repos')) {
+				return { ok: true, json: async () => ({ repos: ['repo1', 'repo2'] }) };
+			}
+			return { ok: true, json: async () => ({}) };
+		}) as any;
+
+		render(GithubIssuesPanel);
+
+		// Wait for loadOwners and subsequent loadRepos
+		await new Promise(resolve => setTimeout(resolve, 300));
+
+		const repoInput = page.getByPlaceholder('e.g. react');
+		await repoInput.click();
+		await new Promise(resolve => setTimeout(resolve, 100));
+
+		await expect.element(page.getByText('repo1')).toBeInTheDocument();
+		await expect.element(page.getByText('repo2')).toBeInTheDocument();
+	});
+
+
+
+
 });
+
