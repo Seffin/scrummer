@@ -24,10 +24,44 @@ describe('runGhJson', () => {
 });
 
 describe('createGithubIssue', () => {
-	it('returns partial success when project link fails', async () => {
+	it('should create an issue and add it to a project', async () => {
+		const runRaw = vi.fn().mockResolvedValue('https://github.com/acme/repo/issues/81');
 		const runJson = vi
 			.fn()
-			.mockResolvedValueOnce({ number: 81, title: 'Track deployment prep', url: 'https://github.com/acme/repo/issues/81' })
+			.mockResolvedValueOnce({
+				number: 81,
+				title: 'Project Task',
+				url: 'https://github.com/acme/repo/issues/81'
+			})
+			.mockResolvedValueOnce({ item: 'added' });
+
+		const result = await createGithubIssue(
+			{
+				owner: 'acme',
+				repo: 'repo',
+				title: 'Project Task',
+				mode: 'issue-and-project',
+				projectId: '1'
+			},
+			runJson,
+			runRaw
+		);
+
+		expect(runJson).toHaveBeenCalledWith(
+			expect.arrayContaining(['project', 'item-add', '1', '--owner', 'acme'])
+		);
+		expect(result.projectLinked).toBe(true);
+	});
+
+	it('returns partial success when project link fails', async () => {
+		const runRaw = vi.fn().mockResolvedValue('https://github.com/acme/repo/issues/81');
+		const runJson = vi
+			.fn()
+			.mockResolvedValueOnce({
+				number: 81,
+				title: 'Track deployment prep',
+				url: 'https://github.com/acme/repo/issues/81'
+			})
 			.mockRejectedValueOnce(new Error('project not found'));
 
 		const result = await createGithubIssue(
@@ -38,7 +72,8 @@ describe('createGithubIssue', () => {
 				mode: 'issue-and-project',
 				projectId: 'PVT_xxx'
 			},
-			runJson
+			runJson,
+			runRaw
 		);
 
 		expect(result.number).toBe(81);

@@ -5,6 +5,17 @@ const execFileAsync = promisify(execFile);
 
 type ExecLike = (args: string[]) => Promise<{ stdout: string; stderr: string }>;
 
+export async function runGhRaw(args: string[], execLike?: ExecLike) {
+	const runner = execLike ?? ((a: string[]) => execFileAsync('gh', a));
+	try {
+		const { stdout } = await runner(args);
+		return stdout.trim();
+	} catch (error: any) {
+		const message = error?.stderr || error?.message || 'gh command failed';
+		throw new Error(String(message).trim());
+	}
+}
+
 export async function runGhJson(args: string[], execLike?: ExecLike) {
 	const runner = execLike ?? ((a: string[]) => execFileAsync('gh', a));
 	let stdout = '';
@@ -42,9 +53,12 @@ interface CreateGithubIssueResult {
 
 export async function createGithubIssue(
 	payload: CreateGithubIssuePayload,
-	runJson: typeof runGhJson = runGhJson
+	runJson: typeof runGhJson = runGhJson,
+	runRaw: typeof runGhRaw = runGhRaw
 ): Promise<CreateGithubIssueResult> {
-	const created = await runJson([
+	// gh issue create does not always support --json on all versions.
+	// It returns the URL of the created issue to stdout.
+	const url = await runRaw([
 		'issue',
 		'create',
 		'--repo',
@@ -52,10 +66,11 @@ export async function createGithubIssue(
 		'--title',
 		payload.title,
 		'--body',
-		payload.body ?? '',
-		'--json',
-		'number,title,url'
+		payload.body ?? ''
 	]);
+
+	// Now fetch the details using gh issue view which reliably supports --json
+	const created = await runJson(['issue', 'view', url, '--json', 'number,title,url']);
 
 	let projectLinked = false;
 	let warning: string | undefined;
@@ -64,8 +79,9 @@ export async function createGithubIssue(
 			await runJson([
 				'project',
 				'item-add',
-				'--id',
 				payload.projectId,
+				'--owner',
+				payload.owner,
 				'--url',
 				created.url,
 				'--format',

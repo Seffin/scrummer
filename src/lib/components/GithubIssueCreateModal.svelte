@@ -23,6 +23,9 @@
 	let body = $state('');
 	let mode = $state<'issue-only' | 'issue-and-project'>('issue-only');
 	let projectId = $state('');
+	let projects = $state<Array<{ number: number; title: string; url: string }>>([]);
+	let loadingProjects = $state(false);
+	let showProjectsDropdown = $state(false);
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
 	let success = $state<string | null>(null);
@@ -65,6 +68,24 @@
 		}
 	}
 
+	async function loadProjects(nextOwner = owner) {
+		if (!nextOwner || mode !== 'issue-and-project') {
+			projects = [];
+			return;
+		}
+		loadingProjects = true;
+		try {
+			const response = await fetch(`/api/github/options/projects?owner=${encodeURIComponent(nextOwner)}`);
+			const payload = await response.json();
+			if (!response.ok) throw new Error(payload.error ?? 'Failed to load projects');
+			projects = payload.projects ?? [];
+		} catch (e: any) {
+			console.error('Failed to load projects:', e);
+		} finally {
+			loadingProjects = false;
+		}
+	}
+
 	async function retryCurrentError() {
 		if (errorSource === 'owners') {
 			await loadOwners();
@@ -83,6 +104,7 @@
 	$effect(() => {
 		if (open) {
 			void loadRepos(owner);
+			void loadProjects(owner);
 		}
 	});
 
@@ -257,14 +279,56 @@
 				</div>
 
 				{#if mode === 'issue-and-project'}
-					<div class="mt-4 animate-fade-down flex flex-col gap-1.5">
-						<label for="project-id" class="text-xs font-medium text-slate-500 dark:text-slate-400">Project ID</label>
-						<input
-							id="project-id"
-							bind:value={projectId}
-							placeholder="e.g. PVT_kwDOBf_kxs4AV..."
-							class="rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-white dark:focus:bg-slate-800"
-						/>
+					<div class="mt-4 animate-fade-down flex flex-col gap-1.5 relative">
+						<label for="project-id" class="text-xs font-medium text-slate-500 dark:text-slate-400">Project Selection</label>
+						<div class="relative">
+							<input
+								id="project-id"
+								bind:value={projectId}
+								onfocus={() => {
+									if (projects.length > 0) showProjectsDropdown = true;
+								}}
+								onblur={() => setTimeout(() => (showProjectsDropdown = false), 200)}
+								placeholder={loadingProjects ? 'Loading projects...' : 'Select or type project number'}
+								class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-white dark:focus:bg-slate-800"
+							/>
+							
+							{#if projects.length > 0}
+								{@const selectedProject = projects.find(p => String(p.number) === projectId.trim())}
+								{#if selectedProject}
+									<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+										<span>✓</span> {selectedProject.title}
+									</div>
+								{/if}
+								
+								{#if showProjectsDropdown}
+									{@const filteredProjects = projects.filter(p => 
+										p.title.toLowerCase().includes(projectId.toLowerCase()) || 
+										String(p.number).includes(projectId)
+									)}
+									{#if filteredProjects.length > 0}
+										<div class="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+											{#each filteredProjects as project}
+												<button
+													type="button"
+													class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-indigo-50 dark:hover:bg-indigo-500/20 dark:text-slate-200 flex items-center justify-between"
+													onclick={() => {
+														projectId = String(project.number);
+														showProjectsDropdown = false;
+													}}
+												>
+													<span class="font-medium">{project.title}</span>
+													<span class="text-xs text-slate-400">#{project.number}</span>
+												</button>
+											{/each}
+										</div>
+									{/if}
+								{/if}
+							{/if}
+						</div>
+						{#if !loadingProjects && projects.length === 0 && owner}
+							<p class="text-[10px] text-amber-600 dark:text-amber-400">No ProjectV2 boards found for this owner.</p>
+						{/if}
 					</div>
 				{/if}
 

@@ -79,7 +79,7 @@ export async function listGithubRepos(owner: string): Promise<string[]> {
 	const repos = new Set<string>();
 	const trimmedOwner = owner.trim();
 	if (!trimmedOwner) return [];
-
+	
 	try {
 		const remoteRepos = (await runGhJson([
 			'repo',
@@ -105,6 +105,32 @@ export async function listGithubRepos(owner: string): Promise<string[]> {
 	}
 
 	return [...repos].sort((a, b) => a.localeCompare(b));
+}
+
+export interface GithubProject {
+	number: number;
+	title: string;
+	url: string;
+}
+
+export async function listGithubProjects(owner: string): Promise<GithubProject[]> {
+	const trimmedOwner = owner.trim();
+	if (!trimmedOwner) return [];
+
+	try {
+		const result = await runGhJson([
+			'project',
+			'list',
+			'--owner',
+			trimmedOwner,
+			'--format',
+			'json'
+		]);
+		// gh project list returns { "projects": [...], "totalCount": ... }
+		return (result.projects ?? []) as GithubProject[];
+	} catch {
+		return [];
+	}
 }
 
 export { parseGithubRemote };
