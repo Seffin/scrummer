@@ -100,3 +100,116 @@ export async function validateToken(token: string): Promise<boolean> {
 		return false;
 	}
 }
+
+
+// =============================================================================
+// HTTP-ONLY COOKIE STORAGE (Server-side secure storage)
+// =============================================================================
+
+const COOKIE_TOKEN_NAME = 'github_token';
+const COOKIE_OPTIONS = {
+	path: '/',
+	httpOnly: true,
+	sameSite: 'lax' as const,
+	secure: import.meta.env.PROD
+};
+
+/**
+ * Store GitHub token in httpOnly cookie (server-side)
+ * This function should be called from server routes only
+ * @param token GitHub access token
+ * @param cookies SvelteKit cookies object
+ * @param maxAge Token max age in seconds (default: 30 days)
+ */
+export function storeGitHubTokenCookie(token: string, cookies: { set: Function }, maxAge = 30 * 24 * 60 * 60): void {
+	if (!token?.trim()) {
+		throw new Error('Token cannot be empty');
+	}
+
+	try {
+		// Encode token to handle special characters
+		const encodedToken = btoa(token);
+		
+		cookies.set(COOKIE_TOKEN_NAME, encodedToken, {
+			...COOKIE_OPTIONS,
+			maxAge
+		});
+
+		console.log('🔐 [TokenStorage] Token stored in httpOnly cookie');
+	} catch (error) {
+		console.error(`🔐 [TokenStorage] Failed to store token in cookie: ${error instanceof Error ? error.message : String(error)}`);
+		throw new Error('Failed to store token securely');
+	}
+}
+
+/**
+ * Clear GitHub token from cookie (server-side)
+ * @param cookies SvelteKit cookies object
+ */
+export function clearGitHubTokenCookie(cookies: { delete: Function }): void {
+	try {
+		cookies.delete(COOKIE_TOKEN_NAME, { path: '/' });
+		console.log('🔐 [TokenStorage] Token cleared from cookie');
+	} catch (error) {
+		console.error(`🔐 [TokenStorage] Failed to clear token from cookie: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
+ * Get GitHub token from cookie (client-side)
+ * Note: This reads a non-httpOnly companion cookie for client access
+ * The actual token is in httpOnly cookie, but we also set a read-only version
+ */
+export function getGitHubTokenFromCookie(): string | null {
+	if (typeof document === 'undefined') {
+		return null;
+	}
+
+	try {
+		const cookies = document.cookie.split(';');
+		for (const cookie of cookies) {
+			const [name, value] = cookie.trim().split('=');
+			if (name === 'github_token_readable') {
+				return decodeURIComponent(value);
+			}
+		}
+		return null;
+	} catch (error) {
+		console.error(`🔐 [TokenStorage] Failed to get token from cookie: ${error instanceof Error ? error.message : String(error)}`);
+		return null;
+	}
+}
+
+/**
+ * Store GitHub token as readable cookie (client-side access)
+ * This is a companion to the httpOnly cookie for client-side token access
+ * @param token GitHub access token
+ * @param maxAge Max age in seconds (default: 30 days)
+ */
+export function storeGitHubTokenReadableCookie(token: string, maxAge = 30 * 24 * 60 * 60): void {
+	if (typeof document === 'undefined') return;
+
+	try {
+		const expiry = new Date();
+		expiry.setSeconds(expiry.getSeconds() + maxAge);
+		
+		document.cookie = `github_token_readable=${encodeURIComponent(token)}; expires=${expiry.toUTCString()}; path=/; SameSite=Lax`;
+		console.log('🔐 [TokenStorage] Readable token cookie stored');
+	} catch (error) {
+		console.error(`🔐 [TokenStorage] Failed to store readable cookie: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
+ * Clear readable token cookie
+ */
+export function clearGitHubTokenReadableCookie(): void {
+	if (typeof document === 'undefined') return;
+
+	try {
+		document.cookie = 'github_token_readable=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+		console.log('🔐 [TokenStorage] Readable token cookie cleared');
+	} catch (error) {
+		console.error(`🔐 [TokenStorage] Failed to clear readable cookie: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}

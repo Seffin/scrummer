@@ -3,19 +3,23 @@
 	import type { GithubIssue } from '$lib/github/types';
 	import { tracker } from '$lib/stores/tracker.svelte';
 	import { githubStore } from '$lib/stores/github.svelte';
-	import { getUserOrgs, getUserRepos, getRepoIssues, GitHubAuthError } from '$lib/github/api';
-	import { checkAuthOnInit, handleLogin, handleLogout, showLoginPrompt, type LoginState, type LoginCredentials } from '$lib/github/login-flow';
-	import { getAuthState } from '$lib/github/auth';
+	import { getOrgsFromCli, getReposFromCli, getIssuesFromCli, getServerStatus, getGitHubTokenFromCli, GitHubAuthError } from '$lib/github/api';
+	import { handleLogout, showLoginPrompt, type LoginState } from '$lib/github/login-flow';
+	import { getAuthState, storeGitHubToken } from '$lib/github/auth';
 	import { forceLogout, testAuthFlow } from '$lib/github/test-auth';
 	import GithubIssueCreateModal from './GithubIssueCreateModal.svelte';
+	import GhAuthModal from './GhAuthModal.svelte';
+	import DeviceAuthModal from './DeviceAuthModal.svelte';
 
 	let { issues = [] }: { issues?: GithubIssue[] } = $props();
 
 	// Authentication state
 	let isAuthenticated = $state(false);
 	let loginState = $state<LoginState>({ isShowing: false, isLoading: false });
-	let tokenInput = $state('');
 	let authError = $state('');
+	let showGhAuthModal = $state(false);
+	let showDeviceAuthModal = $state(false);
+	let serverStatus = $state<{ type: 'local' | 'remote'; status: 'connected' | 'disconnected'; url: string; message: string } | null>(null);
 
 	// GitHub data state
 	let owner = $state('');
@@ -34,37 +38,40 @@
 
 	// Authentication initialization is now handled in onMount
 
-	// Handle login submission
-	async function handleLoginSubmit() {
-		if (!tokenInput.trim()) {
-			authError = 'Please enter a GitHub token';
+	async function handleGhAuthSuccess() {
+		showGhAuthModal = false;
+		isAuthenticated = true;
+		loginState = { isShowing: false, isLoading: false };
+		authError = '';
+		await loadOwners();
+		await loadUserRepos();
+	}
+
+	async function handleDeviceAuthSuccess() {
+		showDeviceAuthModal = false;
+		isAuthenticated = true;
+		loginState = { isShowing: false, isLoading: false };
+		authError = '';
+		await loadOwners();
+		await loadUserRepos();
+	}
+
+	function startPreferredAuth() {
+		if (serverStatus?.type === 'local') {
+			showGhAuthModal = true;
+			showDeviceAuthModal = false;
 			return;
 		}
-
-		loginState = { ...loginState, isLoading: true, error: undefined };
-		authError = '';
-
-		try {
-			const credentials: LoginCredentials = { token: tokenInput.trim() };
-			const authResult = await handleLogin(credentials);
-			
-			isAuthenticated = true;
-			loginState = { isShowing: false, isLoading: false };
-			tokenInput = '';
-			
-			// Load GitHub data after successful authentication
-			await loadOwners();
-			await loadUserRepos();
-		} catch (error) {
-			authError = error instanceof Error ? error.message : 'Login failed';
-			loginState = { ...loginState, isLoading: false };
-		}
+		showDeviceAuthModal = true;
+		showGhAuthModal = false;
 	}
 
 	// Handle logout
 	function handleLogoutClick() {
 		loginState = handleLogout();
 		isAuthenticated = false;
+		showGhAuthModal = false;
+		showDeviceAuthModal = false;
 		owners = [];
 		repos = [];
 		owner = '';
@@ -78,6 +85,8 @@
 		forceLogout();
 		loginState = showLoginPrompt();
 		isAuthenticated = false;
+		showGhAuthModal = false;
+		showDeviceAuthModal = false;
 		owners = [];
 		repos = [];
 		owner = '';
@@ -130,7 +139,7 @@
 		errorSource = null;
 		try {
 			console.log('📋 Fetching user organizations...');
-			const orgs = (await getUserOrgs()) as any[];
+			const orgs = (await getOrgsFromCli()) as any[];
 			console.log('📋 Organizations received:', orgs);
 			// Extract login/org name from GitHub API response
 			owners = orgs.map((org) => org.login || org.name || '').filter(Boolean);
@@ -158,7 +167,7 @@
 		if (!isAuthenticated) return;
 		
 		try {
-			const userRepos = (await getUserRepos()) as any[];
+			const userRepos = (await getReposFromCli()) as any[];
 			// Extract repo names from GitHub API response
 			repos = userRepos.map((repo) => repo.name || '').filter(Boolean);
 			errorSource = null;
@@ -185,11 +194,11 @@
 			return;
 		}
 		try {
-			const repoList = (await getRepoIssues(nextOwner, '')) as any;
-			// For repos listing, we'll use a different approach
-			// Since getRepoIssues expects owner/repo, we'll fetch from user endpoint
-			// For now, clear repos and set manually - this needs adjustment
-			repos = [];
+			const repoList = (await getReposFromCli(nextOwner)) as any[];
+			repos = repoList.map((item: any) => item.name || item).filter(Boolean);
+			if (!repos.includes(repo)) {
+				repo = '';
+			}
 			errorSource = null;
 		} catch (e: any) {
 			if (requestId !== repoRequestSeq) return;
@@ -220,25 +229,43 @@
 
 	onMount(() => {
 		console.log('🚀 Component mounted, checking authentication...');
-		
-		// Check if there's a token in localStorage first
-		const token = getAuthState();
-		console.log('🚀 Token in localStorage:', token);
-		
-		// Set authentication state based on token presence
-		if (token.isAuthenticated) {
-			console.log('🚀 Token found, setting authenticated state');
-			isAuthenticated = true;
-			loginState = { isShowing: false, isLoading: false };
-			authError = '';
-			// Load GitHub data after successful authentication
-			void loadOwners();
-			void loadUserRepos();
-		} else {
-			console.log('🚀 No token found, showing login prompt');
+		void (async () => {
+			serverStatus = await getServerStatus();
+			console.log('🚀 Server status:', serverStatus);
+			const token = getAuthState();
+			console.log('🚀 Token in session:', token);
+
+			if (token.isAuthenticated) {
+				isAuthenticated = true;
+				loginState = { isShowing: false, isLoading: false };
+				authError = '';
+				await loadOwners();
+				await loadUserRepos();
+				return;
+			}
+
 			isAuthenticated = false;
 			loginState = showLoginPrompt();
-		}
+
+			// For local mode, auto-import token from local gh CLI if available.
+			if (serverStatus.type === 'local') {
+				try {
+					const tokenFromCli = await getGitHubTokenFromCli();
+					if (tokenFromCli) {
+						storeGitHubToken(tokenFromCli);
+						isAuthenticated = true;
+						loginState = { isShowing: false, isLoading: false };
+						await loadOwners();
+						await loadUserRepos();
+						return;
+					}
+				} catch {
+					// Ignore and present auth modal to complete CLI login.
+				}
+			}
+
+			startPreferredAuth();
+		})();
 	});
 
 	async function loadIssues() {
@@ -246,7 +273,7 @@
 		errorSource = null;
 		githubStore.startLoading();
 		try {
-			const issues = (await getRepoIssues(owner.trim(), repo.trim())) as any[];
+			const issues = (await getIssuesFromCli(owner.trim(), repo.trim())) as any[];
 			// Normalize GitHub API issues to app model
 			const normalized = issues.map((issue: any) => ({
 				number: issue.number,
@@ -284,7 +311,7 @@
 					</div>
 					<div>
 						<h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100">GitHub Authentication</h2>
-						<p class="text-xs text-slate-500 dark:text-slate-400">Enter your Personal Access Token to continue</p>
+						<p class="text-xs text-slate-500 dark:text-slate-400">{serverStatus?.message ?? 'Choose authentication method'}</p>
 					</div>
 				</div>
 			</div>
@@ -300,51 +327,34 @@
 				{/if}
 
 				<div class="space-y-4">
-					<div class="flex flex-col gap-2">
-						<label for="github-token" class="text-sm font-medium text-slate-700 dark:text-slate-300">
-							GitHub Personal Access Token
-						</label>
-						<textarea
-							id="github-token"
-							bind:value={tokenInput}
-							placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-							class="h-24 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm font-mono outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-white dark:focus:bg-slate-800"
-							disabled={loginState.isLoading}
-						></textarea>
-					</div>
-
 					<div class="flex items-center gap-3">
 						<button
 							class="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-							onclick={handleLoginSubmit}
-							disabled={loginState.isLoading || !tokenInput.trim()}
+							onclick={startPreferredAuth}
 						>
-							{#if loginState.isLoading}
-								<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
-								Authenticating...
+							{#if serverStatus?.type === 'local'}
+								<span>🖥️</span>
+								Authenticate with GitHub CLI
 							{:else}
-								<span>🔑</span>
-								Authenticate
+								<span>📱</span>
+								Authenticate with Device Flow
 							{/if}
 						</button>
 						
 						<button
 							class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-							onclick={() => tokenInput = ''}
-							disabled={loginState.isLoading}
+							onclick={handleForceLogout}
 						>
-							Clear
+							Reset Auth
 						</button>
 					</div>
 
 					<div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700/50 dark:bg-slate-800/50">
-						<h3 class="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">How to get a token:</h3>
+						<h3 class="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">How this works:</h3>
 						<ol class="list-decimal list-inside space-y-1 text-xs text-slate-600 dark:text-slate-400">
-							<li>Go to GitHub Settings → Developer settings → Personal access tokens</li>
-							<li>Click "Generate new token (classic)"</li>
-							<li>Select scopes: <code class="rounded bg-slate-200 px-1 dark:bg-slate-700">repo</code> and <code class="rounded bg-slate-200 px-1 dark:bg-slate-700">read:org</code></li>
-							<li>Generate and copy the token</li>
-							<li>Paste it in the field above</li>
+							<li>Desktop/local server: uses local <code class="rounded bg-slate-200 px-1 dark:bg-slate-700">gh auth login</code> credentials.</li>
+							<li>Mobile/remote mode: falls back to GitHub Device Flow OAuth.</li>
+							<li>Authentication is scoped per device and user session.</li>
 						</ol>
 					</div>
 				</div>
@@ -651,4 +661,32 @@
 		await loadIssues();
 	}}
 />
+
+{#if showGhAuthModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+		<div class="w-full max-w-xl">
+			<GhAuthModal
+				onSuccess={handleGhAuthSuccess}
+				onCancel={() => {
+					showGhAuthModal = false;
+					loginState = showLoginPrompt();
+				}}
+			/>
+		</div>
+	</div>
+{/if}
+
+{#if showDeviceAuthModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+		<div class="w-full max-w-xl">
+			<DeviceAuthModal
+				onSuccess={handleDeviceAuthSuccess}
+				onCancel={() => {
+					showDeviceAuthModal = false;
+					loginState = showLoginPrompt();
+				}}
+			/>
+		</div>
+	</div>
+{/if}
 

@@ -1,9 +1,9 @@
 /**
  * GitHub Authentication Utilities
- * Manages per-device GitHub Personal Access Tokens stored in localStorage
+ * Manages per-session GitHub Personal Access Tokens
  */
 
-const GITHUB_TOKEN_KEY = 'github_pat';
+import { storeSessionToken, getSessionToken, removeSessionToken } from '$lib/auth/session';
 
 export interface GitHubAuthState {
   isAuthenticated: boolean;
@@ -11,53 +11,34 @@ export interface GitHubAuthState {
 }
 
 /**
- * Store GitHub Personal Access Token in localStorage
- * @param token - GitHub Personal Access Token
+ * Store GitHub Personal Access Token in current session
+ * @param token - GitHub token to store
  */
 export function storeGitHubToken(token: string): void {
   if (!token || typeof token !== 'string') {
     throw new Error('Invalid GitHub token provided');
   }
-  
-  try {
-    localStorage.setItem(GITHUB_TOKEN_KEY, token);
-  } catch (error) {
-    console.error('Failed to store GitHub token:', error);
-    throw new Error('Unable to store authentication token');
-  }
+  storeSessionToken(token);
 }
 
 /**
- * Retrieve GitHub Personal Access Token from localStorage
+ * Retrieve GitHub Personal Access Token from current session
  * @returns GitHub token or null if not found
  */
 export function getGitHubToken(): string | null {
-  try {
-    return localStorage.getItem(GITHUB_TOKEN_KEY);
-  } catch (error) {
-    console.error('Failed to retrieve GitHub token:', error);
-    return null;
-  }
+  return getSessionToken();
 }
 
 /**
- * Remove GitHub Personal Access Token from localStorage
- * @returns true if token was removed, false if no token existed
+ * Remove GitHub Personal Access Token from current session
  */
-export function removeGitHubToken(): boolean {
-  try {
-    const token = localStorage.getItem(GITHUB_TOKEN_KEY);
-    localStorage.removeItem(GITHUB_TOKEN_KEY);
-    return token !== null;
-  } catch (error) {
-    console.error('Failed to remove GitHub token:', error);
-    return false;
-  }
+export function removeGitHubToken(): void {
+  removeSessionToken();
 }
 
 /**
- * Check current authentication state
- * @returns Authentication state object
+ * Get current authentication state
+ * @returns Authentication state with token
  */
 export function getAuthState(): GitHubAuthState {
   const token = getGitHubToken();
@@ -72,7 +53,7 @@ export function getAuthState(): GitHubAuthState {
  * @param token - GitHub token to validate
  * @returns true if token appears valid
  */
-export function validateGitHubToken(token: string): boolean {
+export function validateGitHubTokenFormat(token: string): boolean {
   // GitHub PATs are typically 40+ characters and start with 'ghp_' for classic tokens
   // or 'github_pat_' for fine-grained tokens
   if (!token || typeof token !== 'string') {
@@ -86,12 +67,64 @@ export function validateGitHubToken(token: string): boolean {
 }
 
 /**
+ * Validate GitHub token by making a test API call to /user
+ * Following the mobile approach: validate token before using it
+ */
+export async function validateGitHubTokenAPI(token: string): Promise<boolean> {
+  try {
+    console.log('🔐 Validating token with GitHub API...');
+    const response = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+    
+    if (response.ok) {
+      console.log('🔐 Token validation successful');
+      return true;
+    } else if (response.status === 401) {
+      console.log('🔐 Token validation failed: 401 Unauthorized');
+      return false;
+    } else {
+      console.log('🔐 Token validation failed:', response.status, response.statusText);
+      return false;
+    }
+  } catch (error) {
+    console.error('🔐 Token validation error:', error);
+    return false;
+  }
+}
+
+/**
+ * Validate current stored token and clear if invalid
+ * Following the mobile approach: check token validity on initialization
+ */
+export async function validateAndCleanStoredToken(): Promise<boolean> {
+  const token = getGitHubToken();
+  if (!token) {
+    console.log('🔐 No token found in storage');
+    return false;
+  }
+
+  const isValid = await validateGitHubTokenAPI(token);
+  if (!isValid) {
+    console.log('🔐 Stored token is invalid, clearing it');
+    removeGitHubToken();
+    return false;
+  }
+
+  console.log('🔐 Stored token is valid');
+  return true;
+}
+
+/**
  * Store validated GitHub token
  * @param token - GitHub token to validate and store
  * @throws Error if token is invalid
  */
 export function authenticateWithToken(token: string): void {
-  if (!validateGitHubToken(token)) {
+  if (!validateGitHubTokenFormat(token)) {
     throw new Error('Invalid GitHub token format');
   }
   

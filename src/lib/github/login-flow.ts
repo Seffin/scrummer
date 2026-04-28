@@ -3,7 +3,7 @@
  * Handles the authentication prompt and token submission flow
  */
 
-import { authenticateWithToken, validateGitHubToken } from './auth';
+import { authenticateWithToken, validateGitHubTokenFormat } from './auth';
 import { initializeAuth, type AuthInitResult } from './auth-manager';
 
 export interface LoginState {
@@ -50,7 +50,7 @@ export async function handleLogin(credentials: LoginCredentials): Promise<AuthIn
 
   try {
     // Validate token format
-    if (!validateGitHubToken(credentials.token)) {
+    if (!validateGitHubTokenFormat(credentials.token)) {
       throw new Error('Invalid GitHub token format. Tokens should start with "ghp_" or "github_pat_"');
     }
 

@@ -1,0 +1,18 @@
+{
+  "name": "worktrack-local-server",
+  "version": "1.0.0",
+  "description": "Local server for per-device GitHub CLI integration",
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts",
+    "dev": "bun run --watch index.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.8.2",
+    "hono": "^3.11.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "bun-types": "latest"
+  }
+}

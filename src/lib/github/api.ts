@@ -4,6 +4,7 @@
  */
 
 import { getGitHubToken } from './auth';
+import { dualApi } from './dual-api';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
@@ -233,4 +234,68 @@ export async function getRepoIssues(owner: string, repo: string) {
 	return githubGet(
 		`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?per_page=100&state=all`
 	);
+}
+
+/**
+ * Dual API helpers (local GitHub CLI + remote fallback)
+ */
+export async function checkGitHubCliAvailability() {
+	const response = await dualApi.checkGitHubCli();
+	if (response.error || !response.data) {
+		return { available: false };
+	}
+	return response.data;
+}
+
+export async function getGitHubTokenFromCli(): Promise<string> {
+	const response = await dualApi.getGitHubToken();
+	if (response.error || !response.data) {
+		throw new Error(response.error || 'Failed to get GitHub token from CLI');
+	}
+	return response.data.token;
+}
+
+export async function getGitHubUserFromCli() {
+	const response = await dualApi.getGitHubUser();
+	if (response.error || !response.data) {
+		throw new Error(response.error || 'Failed to get GitHub user');
+	}
+	return response.data.user;
+}
+
+export async function getOrgsFromCli() {
+	const response = await dualApi.getOrganizations();
+	if (response.error || !response.data) {
+		throw new Error(response.error || 'Failed to get organizations');
+	}
+	return response.data.orgs;
+}
+
+export async function getReposFromCli(owner?: string) {
+	if (owner) {
+		const response = await fetch(`/api/github/options/repos?owner=${encodeURIComponent(owner)}`);
+		const data = await response.json();
+		if (!response.ok) {
+			throw new Error(data?.error || 'Failed to get repositories');
+		}
+		return data.repos;
+	}
+
+	const response = await dualApi.getRepositories();
+	if (response.error || !response.data) {
+		throw new Error(response.error || 'Failed to get repositories');
+	}
+	return response.data.repos;
+}
+
+export async function getIssuesFromCli(owner: string, repo: string) {
+	const response = await dualApi.getIssues(owner, repo);
+	if (response.error || !response.data) {
+		throw new Error(response.error || 'Failed to get issues');
+	}
+	return response.data.issues;
+}
+
+export async function getServerStatus() {
+	return dualApi.getServerStatus();
 }
