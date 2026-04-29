@@ -315,9 +315,8 @@ describe('Auth Initialization', () => {
 			vi.mocked(tokenStorage.hasToken).mockReturnValue(false);
 			await initializeAuth();
 
-			const passedState1 = callback.mock.calls[0][0];
-		// Wait a tick to ensure state is fully updated
-		await new Promise((resolve) => setImmediate(resolve));
+			// Wait a tick to ensure state is fully updated
+			await new Promise((resolve) => setImmediate(resolve));
 			onAuthStateChange(callback);
 
 			logout();

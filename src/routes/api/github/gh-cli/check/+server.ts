@@ -10,7 +10,7 @@ export async function POST() {
 		await execAsync('gh --version', { timeout: 5000 });
 		
 		return json({ available: true });
-	} catch (error) {
+	} catch {
 		return json({ available: false });
 	}
 }

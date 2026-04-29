@@ -81,8 +81,6 @@ class ServerDetection {
 
     const isLocalAvailable = await this.checkLocalServer();
     const localUrl = 'http://localhost:3001';
-    const remoteUrl = ''; // Will be set to current origin for remote
-
     this.serverInfo = {
       isLocalAvailable,
       localUrl,

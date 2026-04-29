@@ -18,16 +18,16 @@ export async function runGhRaw(args: string[], execLike?: ExecLike) {
 
 export async function runGhJson(args: string[], execLike?: ExecLike) {
 	const runner = execLike ?? ((a: string[]) => execFileAsync('gh', a));
-	let stdout = '';
+	let parsedStdout: string;
 	try {
-		({ stdout } = await runner(args));
+		({ stdout: parsedStdout } = await runner(args));
 	} catch (error: any) {
 		const message = error?.stderr || error?.message || 'gh command failed';
 		throw new Error(String(message).trim());
 	}
 
 	try {
-		return JSON.parse(stdout);
+		return JSON.parse(parsedStdout);
 	} catch {
 		throw new Error('Invalid gh JSON response');
 	}

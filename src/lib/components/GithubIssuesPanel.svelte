@@ -3,10 +3,9 @@
 	import type { GithubIssue } from '$lib/github/types';
 	import { tracker } from '$lib/stores/tracker.svelte';
 	import { githubStore } from '$lib/stores/github.svelte';
-	import { getServerStatus, getGitHubTokenFromCli, GitHubAuthError, getUserProfile, getUserOrgs, getUserRepos, getRepoIssues, githubGet } from '$lib/github/api';
+	import { GitHubAuthError, getUserProfile, getUserOrgs, getUserRepos, getRepoIssues, githubGet } from '$lib/github/api';
 	import { handleLogout, showLoginPrompt, type LoginState } from '$lib/github/login-flow';
-	import { getAuthState, storeGitHubToken } from '$lib/github/auth';
-	import { forceLogout, testAuthFlow } from '$lib/github/test-auth';
+	import { getAuthState } from '$lib/github/auth';
 	import GithubIssueCreateModal from './GithubIssueCreateModal.svelte';
 	import DeviceAuthModal from './DeviceAuthModal.svelte';
 
@@ -59,22 +58,6 @@
 		owner = '';
 		repo = '';
 		githubStore.clearData();
-	}
-
-	// Force logout and clear all auth data (for debugging)
-	function handleForceLogout() {
-		console.log('🚪 Force logout triggered');
-		forceLogout();
-		loginState = showLoginPrompt();
-		isAuthenticated = false;
-		showGhAuthModal = false;
-		showDeviceAuthModal = false;
-		owners = [];
-		repos = [];
-		owner = '';
-		repo = '';
-		githubStore.clearData();
-		authError = 'Authentication cleared. Please login again.';
 	}
 
 	$effect(() => {

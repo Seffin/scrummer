@@ -43,11 +43,6 @@ export function hideLoginPrompt(): LoginState {
  * @returns Promise that resolves on successful authentication
  */
 export async function handleLogin(credentials: LoginCredentials): Promise<AuthInitResult> {
-  const loginState: LoginState = {
-    isShowing: true,
-    isLoading: true
-  };
-
   try {
     // Validate token format
     if (!validateGitHubTokenFormat(credentials.token)) {

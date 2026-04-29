@@ -3,7 +3,7 @@
  * Exchanges device code for access token via server-side proxy
  */
 
-import { json, type Cookies } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { storeGitHubTokenCookie } from '$lib/auth/tokenStorage';
 import { env } from '$env/dynamic/private';
