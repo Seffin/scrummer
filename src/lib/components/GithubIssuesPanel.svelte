@@ -323,13 +323,6 @@
 							<span>📱</span>
 							Authenticate with GitHub
 						</button>
-						
-						<button
-							class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-							onclick={handleForceLogout}
-						>
-							Reset Auth
-						</button>
 					</div>
 
 					<div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700/50 dark:bg-slate-800/50">
@@ -372,14 +365,6 @@
 					title="Logout from GitHub"
 				>
 					<span>🚪</span> Logout
-				</button>
-				<button
-					aria-label="Debug Auth"
-					class="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-2 sm:px-3 py-2 text-xs sm:text-sm font-semibold text-amber-700 transition-all hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/70"
-					onclick={handleForceLogout}
-					title="Force logout and clear authentication (debug)"
-				>
-					<span>🔧</span> Reset
 				</button>
 			</div>
 		</div>
