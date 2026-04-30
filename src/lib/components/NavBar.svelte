@@ -1,12 +1,13 @@
 <script lang="ts">
 	import ThemeToggle from './ThemeToggle.svelte';
 
-	let { activeTab = $bindable('timer') }: { activeTab: string } = $props();
+	let { activeTab = $bindable('home') }: { activeTab: string } = $props();
 
 	const navItems = [
+		{ id: 'home',    label: 'Home',    icon: '🏠' },
 		{ id: 'timer',   label: 'Timer',   icon: '⏱' },
 		{ id: 'logs',    label: 'Logs',    icon: '📋' },
-				{ id: 'reports', label: 'Reports', icon: '📊' },
+		{ id: 'reports', label: 'Reports', icon: '📊' },
 		{ id: 'github',  label: 'GitHub',  icon: '🐙' },
 		{ id: 'settings', label: 'Settings', icon: '⚙️' }
 	];
