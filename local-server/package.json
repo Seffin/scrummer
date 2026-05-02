@@ -4,15 +4,18 @@
   "description": "Local server for per-device GitHub CLI integration",
   "type": "module",
   "scripts": {
-    "start": "bun run index.ts",
-    "dev": "bun run --watch index.ts"
+    "start": "tsx index.ts",
+    "dev": "tsx --watch index.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.8.2",
-    "hono": "^3.11.7"
+    "hono": "^4.0.0",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "@types/node": "^20.8.0",
-    "bun-types": "latest"
+    "@types/ws": "^8.5.10",
+    "bun-types": "latest",
+    "tsx": "^4.21.0"
   }
 }

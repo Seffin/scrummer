@@ -3,6 +3,8 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { authService } from './auth.js';
+import { timerService, TimerConflictError } from './timer.js';
 
 const execAsync = promisify(exec);
 
@@ -11,9 +13,19 @@ const app = new Hono();
 // CORS configuration
 app.use('*', cors({
   origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Authentication middleware
+const authMiddleware = async (c: any, next: any) => {
+  const user = authService.authenticateRequest(c);
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  c.set('user', user);
+  await next();
+};
 
 // Health check
 app.get('/health', (c) => {
@@ -22,6 +34,158 @@ app.get('/health', (c) => {
     server: 'local',
     timestamp: new Date().toISOString()
   });
+});
+
+// Authentication endpoints
+app.post('/api/auth/login', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { user, tokens } = await authService.authenticateUser(body);
+    return c.json({ user, ...tokens });
+  } catch (error) {
+    console.error('Auth login error:', error);
+    return c.json({ error: 'Authentication failed' }, 500);
+  }
+});
+
+app.get('/api/auth/me', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    return c.json({ user });
+  } catch (error) {
+    console.error('Auth me error:', error);
+    return c.json({ error: 'Failed to get user info' }, 500);
+  }
+});
+
+app.post('/api/auth/logout', authMiddleware, async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization');
+    const token = authService.extractTokenFromHeader(authHeader);
+    if (token) {
+      authService.logout(token);
+    }
+    return c.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Auth logout error:', error);
+    return c.json({ error: 'Failed to logout' }, 500);
+  }
+});
+
+// Timer endpoints
+app.get('/api/timer/active', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const activeTimer = timerService.getActiveTimer(user);
+    return c.json({ timer: activeTimer });
+  } catch (error) {
+    console.error('Get active timer error:', error);
+    return c.json({ error: 'Failed to get active timer' }, 500);
+  }
+});
+
+app.post('/api/timer/start', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const timer = await timerService.startTimer(user, body);
+    return c.json({ timer });
+  } catch (error) {
+    console.error('Start timer error:', error);
+    if (error instanceof Error && 'type' in error && error.type === 'CONFLICT') {
+      const conflictError = error as TimerConflictError;
+      return c.json({
+        error: 'Timer conflict',
+        message: 'You already have an active timer',
+        conflicting_timer: conflictError.conflictingSession
+      }, 409);
+    }
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to start timer' }, 500);
+  }
+});
+
+app.post('/api/timer/:id/pause', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const sessionId = parseInt(c.req.param('id'));
+    const body = await c.req.json();
+    const timer = await timerService.pauseTimer(user, sessionId, body.device_info || {});
+    return c.json({ timer });
+  } catch (error) {
+    console.error('Pause timer error:', error);
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to pause timer' }, 500);
+  }
+});
+
+app.post('/api/timer/:id/resume', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const sessionId = parseInt(c.req.param('id'));
+    const body = await c.req.json();
+    const timer = await timerService.resumeTimer(user, sessionId, body.device_info || {});
+    return c.json({ timer });
+  } catch (error) {
+    console.error('Resume timer error:', error);
+    if (error instanceof Error && 'type' in error && error.type === 'CONFLICT') {
+      const conflictError = error as TimerConflictError;
+      return c.json({
+        error: 'Timer conflict',
+        message: 'You already have another active timer',
+        conflicting_timer: conflictError.conflictingSession
+      }, 409);
+    }
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to resume timer' }, 500);
+  }
+});
+
+app.post('/api/timer/:id/complete', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const sessionId = parseInt(c.req.param('id'));
+    const body = await c.req.json();
+    const timer = await timerService.completeTimer(user, sessionId, body.device_info || {});
+    return c.json({ timer });
+  } catch (error) {
+    console.error('Complete timer error:', error);
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to complete timer' }, 500);
+  }
+});
+
+app.delete('/api/timer/:id', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const sessionId = parseInt(c.req.param('id'));
+    const body = await c.req.json();
+    await timerService.discardTimer(user, sessionId, body.device_info || {});
+    return c.json({ message: 'Timer discarded successfully' });
+  } catch (error) {
+    console.error('Discard timer error:', error);
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to discard timer' }, 500);
+  }
+});
+
+app.get('/api/timer/sessions', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const limit = parseInt(c.req.query('limit') || '50');
+    const sessions = timerService.getTimerSessions(user, limit);
+    return c.json({ sessions });
+  } catch (error) {
+    console.error('Get timer sessions error:', error);
+    return c.json({ error: 'Failed to get timer sessions' }, 500);
+  }
+});
+
+app.get('/api/timer/:id/events', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const sessionId = parseInt(c.req.param('id'));
+    const events = timerService.getTimerEvents(user, sessionId);
+    return c.json({ events });
+  } catch (error) {
+    console.error('Get timer events error:', error);
+    return c.json({ error: 'Failed to get timer events' }, 500);
+  }
 });
 
 // Check if GitHub CLI is available on this device

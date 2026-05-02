@@ -42,6 +42,7 @@ export interface TrackerState {
 	currentUser: string;
 	users: string[];
 	shiftGoals: Record<string, number>;
+	conflictError: string | null; // Error when another browser tab has an active timer
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -103,7 +104,8 @@ function defaultState(): TrackerState {
 		knownTasks: {},
 		currentUser: 'Default User',
 		users: ['Default User'],
-		shiftGoals: { 'Default User': 8 }
+		shiftGoals: { 'Default User': 8 },
+		conflictError: null
 	};
 }
 
@@ -199,6 +201,24 @@ function createTracker() {
 	function startTimer(client: string, project: string, task: string, assignee: string) {
 		if (!client.trim() || !project.trim() || !task.trim() || !assignee.trim()) return;
 
+		// Check cross-browser lock: only allow if no other tab has a running timer
+		const lockKey = 'wtt-global-timer-lock';
+		const lockData = typeof localStorage !== 'undefined' ? localStorage.getItem(lockKey) : null;
+		if (lockData) {
+			try {
+				const lock = JSON.parse(lockData);
+				// If lock is younger than 30 seconds, another tab has the lock
+				if (Date.now() - lock.timestamp < 30000) {
+					state.conflictError = `Timer already running in another browser tab on task: "${lock.task}". Stop it first.`;
+					return;
+				}
+			} catch {
+				// Malformed lock, ignore
+			}
+		}
+
+		state.conflictError = null;
+
 		// Ensure client/project exist in lists
 		addClient(client);
 		addProject(client, project);
@@ -221,6 +241,7 @@ function createTracker() {
 		}
 
 		const now = new Date().toISOString();
+		const taskTitle = `${client} / ${project} / ${task}`;
 
 		const newTimer: ActiveTimer = {
 			id: generateId(),
@@ -233,6 +254,16 @@ function createTracker() {
 			elapsedSeconds: 0,
 			running: true
 		};
+
+		// Acquire global lock for this tab
+		if (typeof localStorage !== 'undefined') {
+			const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+			localStorage.setItem(lockKey, JSON.stringify({
+				instanceId,
+				task: taskTitle,
+				timestamp: Date.now()
+			}));
+		}
 
 		state.activeTimers = [...state.activeTimers, newTimer];
 		startInterval();
@@ -281,14 +312,54 @@ function createTracker() {
 	function pauseTimer(id: string) {
 		const idx = state.activeTimers.findIndex(t => t.id === id);
 		if (idx === -1 || !state.activeTimers[idx].running) return;
-		state.activeTimers[idx] = { ...state.activeTimers[idx], status: 'On Hold', running: false };
+		
+		const pausedTimer = { ...state.activeTimers[idx], status: 'On Hold' as TaskStatus, running: false };
+		state.pausedTimers = [pausedTimer, ...state.pausedTimers];
+		state.activeTimers.splice(idx, 1);
+		
+		// Release lock when pausing the timer
+		if (typeof localStorage !== 'undefined') {
+			localStorage.removeItem('wtt-global-timer-lock');
+		}
 		persist();
 	}
 
 	function resumeTimer(id: string) {
-		const idx = state.activeTimers.findIndex(t => t.id === id);
-		if (idx === -1 || state.activeTimers[idx].running) return;
-		state.activeTimers[idx] = { ...state.activeTimers[idx], status: 'In Progress', running: true };
+		const idx = state.pausedTimers.findIndex(t => t.id === id);
+		if (idx === -1 || state.pausedTimers[idx].running) return;
+		
+		// Check cross-browser lock before resuming
+		const lockKey = 'wtt-global-timer-lock';
+		const lockData = typeof localStorage !== 'undefined' ? localStorage.getItem(lockKey) : null;
+		if (lockData) {
+			try {
+				const lock = JSON.parse(lockData);
+				if (Date.now() - lock.timestamp < 30000) {
+					state.conflictError = `Timer already running in another browser tab on task: "${lock.task}". Stop it first.`;
+					return;
+				}
+			} catch {
+				// Ignore
+			}
+		}
+
+		state.conflictError = null;
+		
+		const resumedTimer = { ...state.pausedTimers[idx], status: 'In Progress' as TaskStatus, running: true };
+		state.activeTimers = [...state.activeTimers, resumedTimer];
+		state.pausedTimers.splice(idx, 1);
+		
+		// Acquire lock when resuming
+		if (typeof localStorage !== 'undefined') {
+			const instanceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+			const taskTitle = `${resumedTimer.client} / ${resumedTimer.project} / ${resumedTimer.task}`;
+			localStorage.setItem(lockKey, JSON.stringify({
+				instanceId,
+				task: taskTitle,
+				timestamp: Date.now()
+			}));
+		}
+
 		startInterval();
 		persist();
 	}
@@ -299,6 +370,11 @@ function createTracker() {
 
 		const target = state.activeTimers[idx];
 		state.activeTimers.splice(idx, 1);
+
+		// Release lock when completing
+		if (typeof localStorage !== 'undefined') {
+			localStorage.removeItem('wtt-global-timer-lock');
+		}
 
 		const endTime = new Date().toISOString();
 		const session: WorkSession = {
@@ -321,6 +397,11 @@ function createTracker() {
 		const idx = state.activeTimers.findIndex(t => t.id === id);
 		if (idx === -1) return;
 		state.activeTimers.splice(idx, 1);
+		
+		// Release lock when discarding
+		if (typeof localStorage !== 'undefined') {
+			localStorage.removeItem('wtt-global-timer-lock');
+		}
 		persist();
 	}
 

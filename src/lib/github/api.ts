@@ -78,30 +78,28 @@ export async function githubFetch<T>(
 			headers: buildHeaders(customHeaders)
 		});
 
-		// Handle 401 Unauthorized
-		if (response.status === 401) {
-			throw new GitHubAuthError('Unauthorized: Your GitHub token is invalid or expired', 401);
-		}
-
-		// Handle 404 Not Found
-		if (response.status === 404) {
-			const data = (await response.json()) as GitHubErrorResponse;
-			throw new GitHubNotFoundError(data.message || 'Resource not found', 404);
-		}
-
-		// Handle other non-OK responses
+		// Handle non-OK responses
 		if (!response.ok) {
 			const data = (await response.json()) as GitHubErrorResponse;
-			const errorMessage = data.message || `GitHub API Error: ${response.status} ${response.statusText}`;
 
+			if (response.status === 401) {
+				throw new GitHubAuthError('Unauthorized: Your GitHub token is invalid or expired', 401);
+			}
+
+			if (response.status === 404) {
+				throw new GitHubNotFoundError(data.message || 'Resource not found', 404);
+			}
+
+			const errorMessage = data.message || `GitHub API Error: ${response.status} ${response.statusText}`;
 			if (throwOnError) {
 				throw new Error(errorMessage);
 			}
+
+			return data as unknown as T;
 		}
 
-		// Parse and return JSON
-		const json = (await response.json()) as T;
-		return json;
+		// Parse and return JSON for successful responses
+		return (await response.json()) as T;
 	} catch (error) {
 		// Re-throw our custom errors
 		if (error instanceof GitHubAuthError || error instanceof GitHubNotFoundError) {
@@ -113,8 +111,11 @@ export async function githubFetch<T>(
 			throw error;
 		}
 
-		// Wrap unknown errors
-		throw new Error(`GitHub API request failed: ${String(error)}`);
+		// Wrap unknown errors with the original cause for better diagnostics
+		throw new Error(
+			`GitHub API request failed: ${String(error)}`,
+			{ cause: error }
+		);
 	}
 }
 

@@ -24,10 +24,17 @@ describe('tracker store - github integration', () => {
 	});
 
 	it('should find a paused timer for a github issue', () => {
+		// Clear any existing locks that might prevent timer creation
+		if (typeof localStorage !== 'undefined') {
+			localStorage.removeItem('wtt-global-timer-lock');
+		}
+		
 		const issue = { number: 101, title: 'Paused Issue' };
 		tracker.startTimerFromGithubIssue(issue as any, 'Tom');
 		
 		const timer = tracker.getTimerForIssue(101);
+		expect(timer).toBeDefined();
+		
 		if (timer) {
 			tracker.pauseTimer(timer.id);
 		}

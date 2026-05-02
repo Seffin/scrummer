@@ -149,6 +149,17 @@
 		{/if}
 
 		<div class="p-6 sm:p-8 {tracker.state.activeTimers.length > 0 ? 'pt-0 sm:pt-0' : ''}">
+			{#if tracker.state.conflictError}
+				<div class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/30 dark:bg-red-950/20">
+					<div class="flex gap-3">
+						<div class="text-xl">⚠️</div>
+						<div class="flex-1">
+							<p class="text-sm font-semibold text-red-900 dark:text-red-200">{tracker.state.conflictError}</p>
+							<p class="mt-1 text-xs text-red-800 dark:text-red-300">Stop the running timer in the other tab before starting a new one.</p>
+						</div>
+					</div>
+				</div>
+			{/if}
 			{#if tracker.state.activeTimers.length === 0 || showNewTaskForm}
 				<div class={tracker.state.activeTimers.length > 0 ? "animate-fade-up border-t border-slate-200/50 pt-8 dark:border-white/10" : ""}>
 					{#if tracker.state.activeTimers.length > 0}

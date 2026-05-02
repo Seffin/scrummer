@@ -13,19 +13,21 @@ import {
 	GitHubAuthError,
 	GitHubNotFoundError
 } from './api';
-import * as tokenStorage from '../auth/tokenStorage';
+import * as githubAuth from './auth';
 
-vi.mock('../auth/tokenStorage');
+vi.mock('./auth', () => ({
+	getGitHubToken: vi.fn()
+}));
 
 describe('GitHub API Client', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		global.fetch = vi.fn();
+		vi.stubGlobal('fetch', vi.fn());	
 	});
 
 	describe('buildHeaders (implicit in githubFetch)', () => {
 		it('should throw error if no token stored', async () => {
-			vi.mocked(tokenStorage.getToken).mockReturnValue(null);
+			vi.mocked(githubAuth.getGitHubToken).mockReturnValue(null);
 
 			await expect(githubFetch('/user')).rejects.toThrow(
 				'No GitHub token found. Please authenticate first.'
@@ -33,7 +35,7 @@ describe('GitHub API Client', () => {
 		});
 
 		it('should include Authorization: Bearer <token> header', async () => {
-			vi.mocked(tokenStorage.getToken).mockReturnValue('ghp_test123');
+			vi.mocked(githubAuth.getGitHubToken).mockReturnValue('ghp_test123');
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => ({ login: 'testuser' })
@@ -54,7 +56,7 @@ describe('GitHub API Client', () => {
 
 	describe('githubFetch()', () => {
 		beforeEach(() => {
-			vi.mocked(tokenStorage.getToken).mockReturnValue('ghp_test123');
+			vi.mocked(githubAuth.getGitHubToken).mockReturnValue('ghp_test123');
 		});
 
 		it('should throw GitHubAuthError on 401 response', async () => {
@@ -62,7 +64,7 @@ describe('GitHub API Client', () => {
 				ok: false,
 				status: 401,
 				json: async () => ({ message: 'Bad credentials' })
-			} as any);
+			} as unknown as Response);
 
 			await expect(githubFetch('/user')).rejects.toThrow(GitHubAuthError);
 		});
@@ -84,7 +86,7 @@ describe('GitHub API Client', () => {
 				ok: false,
 				status: 500,
 				json: async () => ({ message: 'Internal Server Error' })
-			} as any);
+			} as unknown as Response);
 
 			await expect(githubFetch('/user')).rejects.toThrow();
 		});
@@ -135,7 +137,7 @@ describe('GitHub API Client', () => {
 
 	describe('HTTP verb methods', () => {
 		beforeEach(() => {
-			vi.mocked(tokenStorage.getToken).mockReturnValue('ghp_test123');
+			vi.mocked(githubAuth.getGitHubToken).mockReturnValue('ghp_test123');
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => ({})
@@ -202,7 +204,7 @@ describe('GitHub API Client', () => {
 
 	describe('Convenience methods', () => {
 		beforeEach(() => {
-			vi.mocked(tokenStorage.getToken).mockReturnValue('ghp_test123');
+			vi.mocked(githubAuth.getGitHubToken).mockReturnValue('ghp_test123');
 		});
 
 		it('getUserRepos() should call /user/repos endpoint', async () => {
