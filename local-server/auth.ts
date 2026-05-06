@@ -8,6 +8,7 @@ export interface AuthUser {
   username: string;
   email?: string;
   avatar_url?: string;
+  github_repo?: string;
 }
 
 export interface LoginRequest {
@@ -165,6 +166,7 @@ export class AuthService {
     if (data.github_id) allowedUpdates.github_id = data.github_id;
     if (data.github_username) allowedUpdates.github_username = data.github_username;
     if (data.google_id) allowedUpdates.google_id = data.google_id;
+    if (data.github_repo) allowedUpdates.github_repo = data.github_repo;
 
     const updated = db.updateUser(user.id, allowedUpdates);
 
@@ -200,6 +202,7 @@ export class AuthService {
       username: user.username,
       email: user.email,
       avatar_url: user.avatar_url,
+      github_repo: user.github_repo,
     };
   }
 

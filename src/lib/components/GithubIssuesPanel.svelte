@@ -44,6 +44,16 @@
 			authError = '';
 			loadOwners();
 			loadUserRepos();
+
+			// Initialize owner/repo from user settings if available
+			if (authStore.user?.github_repo && !owner && !repo) {
+				const parts = authStore.user.github_repo.split('/');
+				if (parts.length === 2) {
+					owner = parts[0];
+					repo = parts[1];
+					void loadIssues();
+				}
+			}
 		} else {
 			loginState = showLoginPrompt();
 		}

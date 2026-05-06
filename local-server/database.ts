@@ -15,6 +15,7 @@ export interface User {
   email?: string;
   password_hash?: string;
   avatar_url?: string;
+  github_repo?: string;
   created_at: string;
   updated_at: string;
 }

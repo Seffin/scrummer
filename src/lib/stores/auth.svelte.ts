@@ -8,6 +8,7 @@ export interface User {
 	username: string;
 	email?: string;
 	avatar_url?: string;
+	github_repo?: string;
 }
 
 const API_BASE = browser 

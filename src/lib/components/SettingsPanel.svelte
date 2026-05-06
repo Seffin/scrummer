@@ -31,6 +31,49 @@
 	</div>
 
 	<div class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-white/10">
+		<h3 class="text-lg font-semibold text-slate-900 dark:text-white">GitHub Integration</h3>
+		<p class="mt-1 text-sm text-slate-500">Link your account to a specific repository.</p>
+		
+		<div class="mt-6 space-y-4 border-t border-slate-100 pt-6 dark:border-white/5">
+			<div class="flex flex-col gap-2">
+				<label for="github-repo" class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Target Repository
+				</label>
+				<div class="flex gap-2">
+					<input
+						id="github-repo"
+						type="text"
+						placeholder="owner/repo (e.g., facebook/react)"
+						class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-white/5 dark:bg-white/5 dark:text-white dark:focus:bg-slate-800"
+						value={authStore.user?.github_repo || ''}
+						onchange={async (e) => {
+							const target = e.target as HTMLInputElement;
+							const repo = target.value.trim();
+							if (repo && authStore.user) {
+								const { authApi } = await import('$lib/api/authApi');
+								await authApi.updateProfile({ github_repo: repo });
+								await authStore.fetchMe(); // Refresh local state
+							}
+						}}
+					/>
+					<button 
+						class="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+						onclick={() => {
+							const input = document.getElementById('github-repo') as HTMLInputElement;
+							input.dispatchEvent(new Event('change'));
+						}}
+					>
+						Save
+					</button>
+				</div>
+				<p class="text-[10px] text-slate-500">
+					This repository will be loaded by default in your GitHub Tracking panel.
+				</p>
+			</div>
+		</div>
+	</div>
+
+	<div class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-white/10">
 		<h3 class="text-lg font-semibold text-slate-900 dark:text-white">Preferences</h3>
 		<div class="mt-6 space-y-4 border-t border-slate-100 pt-6 dark:border-white/5">
 			<div class="flex items-center justify-between">
