@@ -14,7 +14,7 @@
 
 <div class="min-h-screen bg-slate-50 dark:bg-slate-950">
 	<!-- Header -->
-	<header class="border-b border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
+	<header class="border-b border-slate-200 bg-white px-4 py-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
 		<div class="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-center gap-4">
 				<div>
@@ -38,7 +38,7 @@
 	</header>
 
 	<!-- Main Content -->
-	<main class="mx-auto max-w-7xl p-6">
+	<main class="mx-auto max-w-7xl p-4 sm:p-6">
 		<!-- Hero Metrics -->
 		<section class="mb-8">
 			<HeroMetricsWidget {timeframe} />

@@ -39,7 +39,7 @@ describe('GitHub API Client', () => {
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => ({ login: 'testuser' })
-			});
+			} as any);
 
 			await githubFetch('/user');
 
@@ -74,7 +74,7 @@ describe('GitHub API Client', () => {
 				ok: false,
 				status: 404,
 				json: async () => ({ message: 'Not Found' })
-			});
+			} as any);
 
 			await expect(githubFetch('/repos/invalid/repo')).rejects.toThrow(
 				GitHubNotFoundError
@@ -96,7 +96,7 @@ describe('GitHub API Client', () => {
 				ok: false,
 				status: 500,
 				json: async () => ({ message: 'Internal Server Error' })
-			});
+			} as any);
 
 			const result = await githubFetch('/user', { throwOnError: false });
 			expect(result).toBeDefined();
@@ -107,7 +107,7 @@ describe('GitHub API Client', () => {
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => mockData
-			});
+			} as any);
 
 			const result = await githubFetch('/user');
 			expect(result).toEqual(mockData);
@@ -211,7 +211,7 @@ describe('GitHub API Client', () => {
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => []
-			});
+			} as any);
 
 			await getUserRepos();
 
@@ -225,7 +225,7 @@ describe('GitHub API Client', () => {
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => []
-			});
+			} as any);
 
 			await getUserOrgs();
 
@@ -239,7 +239,7 @@ describe('GitHub API Client', () => {
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => ({})
-			});
+			} as any);
 
 			await getUserProfile();
 
@@ -253,7 +253,7 @@ describe('GitHub API Client', () => {
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => []
-			});
+			} as any);
 
 			await getRepoIssues('torvalds', 'linux');
 
@@ -267,7 +267,7 @@ describe('GitHub API Client', () => {
 			vi.mocked(global.fetch).mockResolvedValueOnce({
 				ok: true,
 				json: async () => []
-			});
+			} as any);
 
 			await getRepoIssues('owner/with-special', 'repo name');
 

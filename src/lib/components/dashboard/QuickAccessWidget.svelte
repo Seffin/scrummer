@@ -26,12 +26,12 @@
 	// Recent Sessions: Last 5 completed
 	let recentSessions = $derived(() => {
 		return [...timerStore.sessions]
-			.filter(s => s.status === 'Completed' || s.status === 'completed')
+			.filter(s => s.status === 'Completed')
 			.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
 			.slice(0, 5);
 	});
 
-	function handlePauseResume(timerId: string, isPaused: boolean) {
+	function handlePauseResume(timerId: string | number, isPaused: boolean) {
 		if (isPaused) {
 			timerStore.resume();
 		} else {
@@ -39,8 +39,8 @@
 		}
 	}
 
-	function handleComplete() {
-		timerStore.complete();
+	function handleComplete(id?: string) {
+		timerStore.complete(id);
 	}
 
 	function startFromIssue(issue: { number: number; title: string }) {
@@ -94,7 +94,7 @@
 								<span class="text-lg">{timer.isPaused ? '▶️' : '⏸️'}</span>
 							</button>
 							<button
-								onclick={handleComplete}
+								onclick={() => handleComplete(timer.id.toString())}
 								class="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-emerald-600 hover:shadow-sm dark:hover:bg-slate-600"
 								title="Complete"
 							>

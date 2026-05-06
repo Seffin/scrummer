@@ -105,7 +105,7 @@
 		};
 
 		for (const s of timerStore.sessions) {
-			const status = s.status === 'completed' ? 'Completed' : s.status;
+			const status = s.status;
 			if (counts[status] !== undefined) {
 				counts[status]++;
 			}

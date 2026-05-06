@@ -1,6 +1,8 @@
 <script lang="ts">
 	import ThemeToggle from './ThemeToggle.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
+
+	let { activeTab = $bindable('home') }: { activeTab?: string } = $props();
 	import { navStore } from '$lib/stores/nav.svelte';
 
 	const navItems = [
@@ -66,7 +68,10 @@
 					<p class="truncate text-[10px] text-slate-500">Free Plan</p>
 				</div>
 				<button 
-					onclick={() => authStore.logout()}
+					onclick={() => {
+						authStore.logout();
+						window.location.href = '/login';
+					}}
 					class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
 					title="Logout"
 				>
@@ -94,8 +99,12 @@
 	<div class="flex items-center gap-3">
 		{#if authStore.isAuthenticated}
 			<button 
-				onclick={() => authStore.logout()}
-				class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400"
+				onclick={() => {
+					authStore.logout();
+					window.location.href = '/login';
+				}}
+				class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
+				title="Logout"
 			>
 				<span class="text-xs">🚪</span>
 			</button>
