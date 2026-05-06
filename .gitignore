@@ -28,3 +28,4 @@ test-results
 # Agent config
 .continue/config.yaml
 .continue/
+local-server/worktrack-data.json
