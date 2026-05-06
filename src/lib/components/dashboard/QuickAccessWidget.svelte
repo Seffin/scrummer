@@ -1,14 +1,19 @@
 <script lang="ts">
-	import { tracker } from '$lib/stores/tracker.svelte';
+	import { timerStore } from '$lib/stores/timer.svelte';
 	import { githubStore } from '$lib/stores/github.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import { formatDuration, formatDate } from '$lib/utils/timeUtils';
 
 	// Now Tracking: Active and paused timers
 	let activeTimers = $derived(() => {
-		return [
-			...tracker.state.activeTimers.map(t => ({ ...t, isPaused: false })),
-			...tracker.state.pausedTimers.map(t => ({ ...t, isPaused: true }))
-		].slice(0, 5);
+		const list = [];
+		if (timerStore.activeTimer) {
+			list.push({ ...timerStore.activeTimer, isPaused: false, elapsed: timerStore.elapsedSeconds });
+		}
+		for (const pt of timerStore.pausedTimers) {
+			list.push({ ...pt, isPaused: true, elapsed: pt.durationSeconds });
+		}
+		return list.slice(0, 5);
 	});
 
 	// Up Next: Open GitHub issues
@@ -20,45 +25,35 @@
 
 	// Recent Sessions: Last 5 completed
 	let recentSessions = $derived(() => {
-		return [...tracker.state.sessions]
-			.sort((a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime())
+		return [...timerStore.sessions]
+			.filter(s => s.status === 'Completed' || s.status === 'completed')
+			.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
 			.slice(0, 5);
 	});
 
-	function formatDuration(seconds: number): string {
+	function handlePauseResume(timerId: string, isPaused: boolean) {
+		if (isPaused) {
+			timerStore.resume();
+		} else {
+			timerStore.pause();
+		}
+	}
+
+	function handleComplete() {
+		timerStore.complete();
+	}
+
+	function startFromIssue(issue: { number: number; title: string }) {
+		timerStore.startFromGithubIssue(issue);
+	}
+
+	function formatWidgetDuration(seconds: number): string {
 		const hours = Math.floor(seconds / 3600);
 		const minutes = Math.floor((seconds % 3600) / 60);
 		if (hours > 0) {
 			return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
 		}
 		return `${minutes}m`;
-	}
-
-	function formatDate(isoStr: string): string {
-		return new Date(isoStr).toLocaleDateString(undefined, {
-			month: 'short',
-			day: 'numeric'
-		});
-	}
-
-	function handlePauseResume(timerId: string, isPaused: boolean) {
-		if (isPaused) {
-			tracker.resumeTimer(timerId);
-		} else {
-			tracker.pauseTimer(timerId);
-		}
-	}
-
-	function handleComplete(timerId: string, isPaused: boolean) {
-		if (isPaused) {
-			tracker.completePausedTimer(timerId);
-		} else {
-			tracker.completeTimer(timerId);
-		}
-	}
-
-	function startFromIssue(issue: { number: number; title: string }) {
-		tracker.startTimerFromGithubIssue(issue, tracker.state.currentUser);
 	}
 </script>
 
@@ -83,13 +78,13 @@
 			<div class="space-y-3">
 				{#each activeTimers() as timer (timer.id)}
 					<div class="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700/50 dark:bg-slate-700/30">
-						<div class="flex-1 min-w-0">
+						<div class="flex-1 min-0">
 							<p class="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{timer.task}</p>
 							<p class="text-xs text-slate-500 dark:text-slate-400">{timer.client} / {timer.project}</p>
 						</div>
 						<div class="flex items-center gap-2">
 							<span class="font-mono text-sm text-slate-700 dark:text-slate-300">
-								{formatDuration(timer.elapsedSeconds)}
+								{formatWidgetDuration(timer.elapsed)}
 							</span>
 							<button
 								onclick={() => handlePauseResume(timer.id, timer.isPaused)}
@@ -99,7 +94,7 @@
 								<span class="text-lg">{timer.isPaused ? '▶️' : '⏸️'}</span>
 							</button>
 							<button
-								onclick={() => handleComplete(timer.id, timer.isPaused)}
+								onclick={handleComplete}
 								class="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white hover:text-emerald-600 hover:shadow-sm dark:hover:bg-slate-600"
 								title="Complete"
 							>
@@ -185,7 +180,7 @@
 							<p class="text-xs text-slate-500 dark:text-slate-400">{session.client} / {session.project}</p>
 						</div>
 						<span class="font-mono text-sm text-slate-700 dark:text-slate-300">
-							{formatDuration(session.durationSeconds)}
+							{formatWidgetDuration(session.durationSeconds)}
 						</span>
 					</div>
 				{/each}

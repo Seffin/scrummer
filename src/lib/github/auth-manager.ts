@@ -86,10 +86,14 @@ export function shouldReAuthenticate(error: unknown): boolean {
   return false;
 }
 
+import { authStore } from '$lib/stores/auth.svelte';
+
 /**
  * Clear authentication state
  * Call this when user explicitly logs out
  */
 export function logout(): void {
   removeGitHubToken();
+  // Also clear from server account
+  authStore.syncGithubToken(null);
 }

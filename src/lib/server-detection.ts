@@ -51,7 +51,8 @@ class ServerDetection {
 
   private async performHealthCheck(): Promise<boolean> {
     try {
-      const response = await fetch('http://localhost:3001/health', {
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const response = await fetch(`http://${hostname}:3001/health`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -61,12 +62,12 @@ class ServerDetection {
 
       if (response.ok) {
         const data = await response.json() as HealthResponse;
-        console.log('✅ Local server detected:', data.server);
+        console.log('✅ Backend server detected:', data.server);
         return true;
       }
       return false;
     } catch (error) {
-      console.log('❌ Local server not available:', error instanceof Error ? error.message : 'Unknown error');
+      console.log('❌ Backend server not available:', error instanceof Error ? error.message : 'Unknown error');
       return false;
     }
   }
@@ -80,12 +81,14 @@ class ServerDetection {
     }
 
     const isLocalAvailable = await this.checkLocalServer();
-    const localUrl = 'http://localhost:3001';
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const localUrl = `http://${hostname}:3001`;
+    
     this.serverInfo = {
       isLocalAvailable,
       localUrl,
-      remoteUrl: window.location.origin,
-      currentUrl: isLocalAvailable ? localUrl : window.location.origin,
+      remoteUrl: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173',
+      currentUrl: isLocalAvailable ? localUrl : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'),
       serverType: isLocalAvailable ? 'local' : 'remote'
     };
 

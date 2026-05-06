@@ -1,17 +1,16 @@
 <script lang="ts">
 	import ThemeToggle from './ThemeToggle.svelte';
-
-	let { activeTab = $bindable('home') }: { activeTab: string } = $props();
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { navStore } from '$lib/stores/nav.svelte';
 
 	const navItems = [
-		{ id: 'home',    label: 'Home',    icon: '🏠' },
-		{ id: 'timer',   label: 'Timer',   icon: '⏱' },
-		{ id: 'logs',    label: 'Logs',    icon: '📋' },
-		{ id: 'reports', label: 'Reports', icon: '📊' },
-		{ id: 'github',  label: 'GitHub',  icon: '🐙' },
+		{ id: 'home',     label: 'Home',     icon: '🏠' },
+		{ id: 'timer',    label: 'Timer',    icon: '⏱' },
+		{ id: 'logs',     label: 'Logs',     icon: '📋' },
+		{ id: 'reports',  label: 'Reports',  icon: '📊' },
+		{ id: 'github',   label: 'GitHub',   icon: '🐙' },
 		{ id: 'settings', label: 'Settings', icon: '⚙️' }
 	];
-
 </script>
 
 <!-- Desktop sidebar -->
@@ -35,15 +34,15 @@
 			{#each navItems as item}
 				<button
 					id="nav-{item.id}"
-					onclick={() => (activeTab = item.id)}
+					onclick={() => navStore.setTab(item.id)}
 					class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200
-						{activeTab === item.id
+						{navStore.activeTab === item.id
 							? 'bg-indigo-50 text-indigo-600 ring-1 ring-indigo-500/30 dark:bg-indigo-600/20 dark:text-indigo-400'
 							: 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200'}"
 				>
 					<span class="text-base">{item.icon}</span>
 					{item.label}
-					{#if activeTab === item.id}
+					{#if navStore.activeTab === item.id}
 						<span class="ml-auto h-1.5 w-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
 					{/if}
 				</button>
@@ -51,8 +50,34 @@
 		</nav>
 	</div>
 
-	<div class="px-2">
-		<ThemeToggle />
+	<div class="flex flex-col gap-4">
+		<!-- User Profile -->
+		{#if authStore.isAuthenticated}
+			<div class="flex items-center gap-3 rounded-2xl bg-slate-100/50 p-2 dark:bg-white/5 border border-slate-200/50 dark:border-white/5">
+				{#if authStore.user?.avatar_url}
+					<img src={authStore.user.avatar_url} alt={authStore.user.username} class="h-9 w-9 rounded-xl object-cover shadow-sm" />
+				{:else}
+					<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 font-bold">
+						{authStore.user?.username?.charAt(0).toUpperCase() || 'U'}
+					</div>
+				{/if}
+				<div class="flex-1 overflow-hidden">
+					<p class="truncate text-xs font-semibold text-slate-900 dark:text-white">{authStore.user?.username || 'User'}</p>
+					<p class="truncate text-[10px] text-slate-500">Free Plan</p>
+				</div>
+				<button 
+					onclick={() => authStore.logout()}
+					class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
+					title="Logout"
+				>
+					<span class="text-sm">🚪</span>
+				</button>
+			</div>
+		{/if}
+
+		<div class="px-2">
+			<ThemeToggle />
+		</div>
 	</div>
 </aside>
 
@@ -66,8 +91,18 @@
 		</div>
 		<p class="text-sm font-bold text-slate-900 dark:text-white">WorkTrack</p>
 	</div>
-	<div class="w-48">
-		<ThemeToggle placement="bottom" />
+	<div class="flex items-center gap-3">
+		{#if authStore.isAuthenticated}
+			<button 
+				onclick={() => authStore.logout()}
+				class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400"
+			>
+				<span class="text-xs">🚪</span>
+			</button>
+		{/if}
+		<div class="w-32">
+			<ThemeToggle placement="bottom" />
+		</div>
 	</div>
 </header>
 
@@ -79,9 +114,9 @@
 	{#each navItems as item}
 		<button
 			id="mobile-nav-{item.id}"
-			onclick={() => (activeTab = item.id)}
+			onclick={() => navStore.setTab(item.id)}
 			class="flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-all duration-200
-				{activeTab === item.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+				{navStore.activeTab === item.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
 		>
 			<span class="text-xl leading-none">{item.icon}</span>
 			{item.label}

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { tracker } from '$lib/stores/tracker.svelte';
+	import { timerStore } from '$lib/stores/timer.svelte';
+	import { formatDuration } from '$lib/utils/timeUtils';
 
-	let report = $derived(tracker.getReport());
+	let report = $derived(timerStore.getReport());
 
 	// Local UI state for expanding/collapsing nodes
 	// We'll store expanded project keys like `${user}-${client}-${project}`
@@ -43,7 +44,7 @@
 						<span class="text-2xl">👤</span>
 						<h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">{rUser.user}</h2>
 						<span class="ml-auto font-mono text-lg font-bold tracking-tight text-slate-600 dark:text-slate-400">
-							{tracker.formatDuration(rUser.seconds)}
+							{formatDuration(rUser.seconds)}
 						</span>
 					</div>
 
@@ -59,7 +60,7 @@
 										<h3 class="text-lg font-bold text-indigo-950 dark:text-indigo-100">{rClient.client}</h3>
 									</div>
 									<div class="font-mono text-lg font-bold text-indigo-600 dark:text-indigo-400">
-										{tracker.formatDuration(rClient.seconds)}
+										{formatDuration(rClient.seconds)}
 									</div>
 								</div>
 
@@ -82,7 +83,7 @@
 										<h4 class="font-semibold text-slate-800 dark:text-slate-200">{rProject.project}</h4>
 									</div>
 									<div class="font-mono text-sm font-medium text-slate-700 dark:text-slate-300">
-										{tracker.formatDuration(rProject.seconds)}
+										{formatDuration(rProject.seconds)}
 									</div>
 								</button>
 
@@ -97,7 +98,7 @@
 														<span class="text-slate-600 dark:text-slate-400">{rTask.task}</span>
 													</div>
 													<span class="font-mono text-xs font-medium text-slate-500 dark:text-slate-500">
-														{tracker.formatDuration(rTask.seconds)}
+														{formatDuration(rTask.seconds)}
 													</span>
 												</li>
 											{/each}

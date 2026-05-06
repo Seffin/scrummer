@@ -1,34 +1,28 @@
 <script lang="ts">
-	import { tracker } from '$lib/stores/tracker.svelte';
+	import { timerStore } from '$lib/stores/timer.svelte';
 	import StatusBadge from './StatusBadge.svelte';
+	import { formatDate, formatTime, formatDuration } from '$lib/utils/timeUtils';
 
-	function formatTime(isoStr: string) {
-		return new Date(isoStr).toLocaleTimeString(undefined, {
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
-	function formatDate(isoStr: string) {
-		return new Date(isoStr).toLocaleDateString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric'
-		});
+	async function handleDelete(id: string) {
+		if (confirm('Delete this log? (Note: Discard is currently handled on server for active timers, sessions are view-only for now)')) {
+			// In the new architecture, we'll implement a proper session deletion soon
+			// For now, let's keep the UI consistent
+			// timerStore.deleteSession(id); 
+		}
 	}
 </script>
 
 <div class="animate-fade-up max-w-5xl mx-auto">
 	<div class="mb-6 flex items-center justify-between px-2">
 		<h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">Work Logs</h2>
-		{#if tracker.state.sessions.length > 0}
+		{#if timerStore.sessions.length > 0}
 			<p class="text-sm text-slate-500 dark:text-slate-400">
-				{tracker.state.sessions.length} session{tracker.state.sessions.length === 1 ? '' : 's'}
+				{timerStore.sessions.length} session{timerStore.sessions.length === 1 ? '' : 's'}
 			</p>
 		{/if}
 	</div>
 
-	{#if tracker.state.sessions.length === 0}
+	{#if timerStore.sessions.length === 0}
 		<div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 py-24 text-center dark:border-slate-700/50">
 			<div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800/50">
 				<span class="text-xl">📋</span>
@@ -55,7 +49,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
-						{#each tracker.state.sessions as session (session.id)}
+						{#each timerStore.sessions as session (session.id)}
 							<tr class="transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5">
 								<td class="px-6 py-4">
 									<div class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -75,17 +69,15 @@
 								<td class="px-6 py-4">
 									<p class="text-slate-700 dark:text-slate-300">{formatDate(session.startTime)}</p>
 									<p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-										{formatTime(session.startTime)} - {formatTime(session.endTime)}
+										{formatTime(session.startTime)} - {session.endTime ? formatTime(session.endTime) : 'Running...'}
 									</p>
 								</td>
 								<td class="px-6 py-4 text-right font-mono font-medium text-slate-800 dark:text-slate-200">
-									{tracker.formatDuration(session.durationSeconds)}
+									{formatDuration(session.durationSeconds)}
 								</td>
 								<td class="px-6 py-4 text-right">
 									<button
-										onclick={() => {
-											if(confirm('Delete this log?')) tracker.deleteSession(session.id);
-										}}
+										onclick={() => handleDelete(session.id)}
 										class="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
 										title="Delete log"
 									>
@@ -100,7 +92,7 @@
 
 			<!-- Mobile List -->
 			<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-800/50 lg:hidden">
-				{#each tracker.state.sessions as session (session.id)}
+				{#each timerStore.sessions as session (session.id)}
 					<div class="flex flex-col p-4">
 						<div class="flex items-start justify-between">
 							<div>
@@ -110,9 +102,7 @@
 								<h4 class="mt-1 text-base font-medium text-slate-800 dark:text-slate-200">{session.task}</h4>
 							</div>
 							<button
-								onclick={() => {
-									if(confirm('Delete this log?')) tracker.deleteSession(session.id);
-								}}
+								onclick={() => handleDelete(session.id)}
 								class="text-xs text-slate-400 transition-colors hover:text-red-500"
 							>
 								🗑️
@@ -122,14 +112,14 @@
 						<div class="mt-3 flex items-center justify-between">
 							<StatusBadge status={session.status} />
 							<p class="font-mono text-lg font-medium text-slate-800 dark:text-slate-200">
-								{tracker.formatDuration(session.durationSeconds)}
+								{formatDuration(session.durationSeconds)}
 							</p>
 						</div>
 
 						<div class="mt-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
 							<span>📅 {formatDate(session.startTime)}</span>
 							<span class="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-700"></span>
-							<span>{formatTime(session.startTime)} - {formatTime(session.endTime)}</span>
+							<span>{formatTime(session.startTime)} - {session.endTime ? formatTime(session.endTime) : '...'}</span>
 						</div>
 					</div>
 				{/each}

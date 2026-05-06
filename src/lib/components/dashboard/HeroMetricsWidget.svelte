@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { tracker } from '$lib/stores/tracker.svelte';
+	import { timerStore } from '$lib/stores/timer.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { githubStore } from '$lib/stores/github.svelte';
 	import { SvelteDate } from 'svelte/reactivity';
 
@@ -12,7 +13,7 @@
 	// Time Tracked: Total duration based on timeframe
 	let timeTracked = $derived(() => {
 		const now = new SvelteDate();
-		const sessions = tracker.state.sessions;
+		const sessions = timerStore.sessions;
 		let totalSeconds = 0;
 
 		for (const s of sessions) {
@@ -22,19 +23,12 @@
 			}
 		}
 
-		// Include active timers
-		for (const t of tracker.state.activeTimers) {
-			const timerDate = new SvelteDate(t.startTime);
+		// Include active timer if it matches timeframe
+		const active = timerStore.activeTimer;
+		if (active) {
+			const timerDate = new SvelteDate(active.start_time);
 			if (isInTimeframe(timerDate, timeframe, now)) {
-				totalSeconds += t.elapsedSeconds;
-			}
-		}
-
-		// Include paused timers
-		for (const t of tracker.state.pausedTimers) {
-			const timerDate = new SvelteDate(t.startTime);
-			if (isInTimeframe(timerDate, timeframe, now)) {
-				totalSeconds += t.elapsedSeconds;
+				totalSeconds += timerStore.elapsedSeconds;
 			}
 		}
 
@@ -43,7 +37,7 @@
 
 	// Shift Goal Progress
 	let shiftGoalSeconds = $derived(() => {
-		return tracker.getUserShiftGoalHours(tracker.state.currentUser) * 3600;
+		return timerStore.getShiftGoal(authStore.user?.username || 'User') * 3600;
 	});
 
 	let shiftProgress = $derived(() => {
@@ -54,7 +48,7 @@
 
 	// Active Timers Count
 	let activeTimersCount = $derived(() => {
-		return tracker.state.activeTimers.filter(t => t.running).length;
+		return timerStore.activeTimer ? 1 : 0;
 	});
 
 	// Pending GitHub Issues Count

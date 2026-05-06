@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tracker } from '$lib/stores/tracker.svelte';
+	import { timerStore } from '$lib/stores/timer.svelte';
 	import { SvelteDate } from 'svelte/reactivity';
 	import { Doughnut, Bar } from 'svelte-chartjs';
 	import {
@@ -29,7 +29,7 @@
 		const clientTimes = new Map<string, number>();
 
 		// Aggregate by client
-		for (const s of tracker.state.sessions) {
+		for (const s of timerStore.sessions) {
 			const sessionDate = new SvelteDate(s.startTime);
 			if (isInTimeframe(sessionDate, timeframe, now)) {
 				clientTimes.set(s.client, (clientTimes.get(s.client) ?? 0) + s.durationSeconds);
@@ -68,7 +68,7 @@
 		}
 
 		// Fill in actual data
-		for (const s of tracker.state.sessions) {
+		for (const s of timerStore.sessions) {
 			const sessionDate = new SvelteDate(s.startTime);
 			const daysDiff = Math.floor((now.getTime() - sessionDate.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -97,16 +97,17 @@
 
 	// Status Distribution Data
 	let statusDistribution = $derived(() => {
-		const counts = {
+		const counts: Record<string, number> = {
 			'Pending': 0,
 			'In Progress': 0,
 			'On Hold': 0,
 			'Completed': 0
 		};
 
-		for (const s of tracker.state.sessions) {
-			if (counts[s.status] !== undefined) {
-				counts[s.status]++;
+		for (const s of timerStore.sessions) {
+			const status = s.status === 'completed' ? 'Completed' : s.status;
+			if (counts[status] !== undefined) {
+				counts[status]++;
 			}
 		}
 

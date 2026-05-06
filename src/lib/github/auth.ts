@@ -21,12 +21,31 @@ export function storeGitHubToken(token: string): void {
   storeSessionToken(token);
 }
 
+import { authStore } from '$lib/stores/auth.svelte';
+
 /**
- * Retrieve GitHub Personal Access Token from current session
+ * Retrieve GitHub Personal Access Token from current session or shared account
  * @returns GitHub token or null if not found
  */
 export function getGitHubToken(): string | null {
-  return getSessionToken();
+  // Priority 1: Current session token (manual login on this device)
+  const sessionToken = getSessionToken();
+  
+  if (sessionToken) {
+    // If we have a local session token, make sure it's synced to the server account
+    if (authStore.user && authStore.user.github_token !== sessionToken) {
+      authStore.syncGithubToken(sessionToken);
+    }
+    return sessionToken;
+  }
+
+  // Priority 2: Shared token from account sync
+  if (authStore.user?.github_token) {
+    console.log('🔄 Using shared GitHub token from account');
+    return authStore.user.github_token;
+  }
+
+  return null;
 }
 
 /**
@@ -42,9 +61,11 @@ export function removeGitHubToken(): void {
  */
 export function getAuthState(): GitHubAuthState {
   const token = getGitHubToken();
+  const isAuthenticated = !!token && token !== 'local_cli_authenticated';
+  
   return {
-    isAuthenticated: !!token,
-    token
+    isAuthenticated,
+    token: isAuthenticated ? token : null
   };
 }
 
@@ -130,4 +151,7 @@ export function authenticateWithToken(token: string): void {
   }
   
   storeGitHubToken(token);
+  
+  // Immediately sync to server account
+  authStore.syncGithubToken(token);
 }

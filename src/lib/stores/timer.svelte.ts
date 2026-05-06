@@ -1,270 +1,372 @@
-/**
- * Timer store — manages the active timer session.
- * Uses setInterval for tick counting and persists state to localStorage
- * so an active session survives a page refresh.
- * 
- * Cross-browser restriction: Only ONE task can run at a time across all tabs.
- * Uses storage events to sync and prevent concurrent timers.
- */
+import { timerApi, type TimerDTO } from '$lib/api/timerApi';
+import { authStore } from './auth.svelte';
+import { calcElapsedSeconds, formatDuration } from '$lib/utils/timeUtils';
 
-import { tasksStore } from './tasks.svelte';
+export type TaskStatus = 'Pending' | 'In Progress' | 'On Hold' | 'Completed' | 'active' | 'paused';
 
-const ACTIVE_KEY = 'wtt-active';
-const TIMER_LOCK_KEY = 'wtt-timer-lock'; // Tracks which tab owns the running timer
-const INSTANCE_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; // Unique ID for this browser tab
-
-export interface ActiveTask {
+export interface WorkSession {
+	id: string;
+	user: string;
 	client: string;
 	project: string;
 	task: string;
+	status: TaskStatus;
+	startTime: string;
+	endTime?: string;
+	durationSeconds: number;
 }
 
-class TimerStore {
-	elapsed = $state(0); // seconds elapsed in current session
-	running = $state(false);
-	activeTask = $state<ActiveTask | null>(null);
-	sessionStart = $state<number | null>(null); // wall-clock ms when session began
-	conflictError = $state<string | null>(null); // Error message when another tab has an active timer
+const STORAGE_KEY = 'work-tracker-metadata';
 
-	private _iid: ReturnType<typeof setInterval> | null = null;
-	private _ownsLock = false; // Whether this tab currently owns the running timer
+function createTimerStore() {
+	let activeTimer = $state<TimerDTO | null>(null);
+	let sessions = $state<WorkSession[]>([]);
+	let isLoading = $state(false);
+	let error = $state<string | null>(null);
+	let conflictError = $state<string | null>(null);
+	
+	// Local metadata
+	let clients = $state<string[]>([]);
+	let projects = $state<Record<string, string[]>>({}); // client -> projects[]
+	let knownTasks = $state<Record<string, string[]>>({}); // client::project -> tasks[]
+	let shiftGoals = $state<Record<string, number>>({});
 
-	/** Formatted elapsed time as HH:MM:SS. */
-	get formatted(): string {
-		const h = Math.floor(this.elapsed / 3600)
-			.toString()
-			.padStart(2, '0');
-		const m = Math.floor((this.elapsed % 3600) / 60)
-			.toString()
-			.padStart(2, '0');
-		const s = (this.elapsed % 60).toString().padStart(2, '0');
-		return `${h}:${m}:${s}`;
+	let _tick = $state(0);
+	let _intervalId: ReturnType<typeof setInterval> | null = null;
+
+	function startTick() {
+		if (_intervalId) return;
+		_intervalId = setInterval(() => { _tick++; }, 1000);
 	}
 
-	/** idle | running | paused */
-	get status(): 'idle' | 'running' | 'paused' {
-		if (!this.activeTask) return 'idle';
-		return this.running ? 'running' : 'paused';
+	function stopTick() {
+		if (_intervalId) {
+			clearInterval(_intervalId);
+			_intervalId = null;
+		}
 	}
 
-	/** Restore persisted timer state (called once client-side). */
-	init() {
-		if (typeof window === 'undefined') return;
-		
-		// Listen for storage changes from other tabs
-		window.addEventListener('storage', (e) => this._onStorageChange(e));
-		
+	function loadMetadata() {
 		try {
-			const raw = localStorage.getItem(ACTIVE_KEY);
+			const raw = localStorage.getItem(STORAGE_KEY);
 			if (raw) {
-				const d = JSON.parse(raw);
-				this.elapsed = d.elapsed ?? 0;
-				this.activeTask = d.activeTask ?? null;
-				this.sessionStart = d.sessionStart ?? null;
-
-				// Recover lost time if session was running when browser closed
-				if (this.sessionStart && this.activeTask) {
-					const now = Date.now();
-					const lostSeconds = Math.floor((now - this.sessionStart) / 1000);
-					this.elapsed = Math.max(this.elapsed, lostSeconds);
-				}
-				// Restore as paused — user must manually resume
+				const data = JSON.parse(raw);
+				clients = data.clients || [];
+				projects = data.projects || {};
+				knownTasks = data.knownTasks || {};
+				shiftGoals = data.shiftGoals || {};
 			}
-		} catch {
-			// Ignore
+		} catch (e) {
+			console.error('[TimerStore] Failed to load metadata', e);
 		}
 	}
 
-	/** Start a new session for the given task. */
-	start(task: ActiveTask) {
-		// Check if another tab has the lock
-		if (!this._canAcquireLock()) {
-			this.conflictError = 'Timer is already running in another browser tab. Stop it first.';
-			return;
-		}
-
-		this.conflictError = null;
-		this.activeTask = task;
-		if (!this.sessionStart) {
-			this.sessionStart = Date.now();
-		}
-		this._acquireLock();
-		this._beginTicking();
+	function saveMetadata() {
+		const data = { clients, projects, knownTasks, shiftGoals };
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 	}
 
-	/** Resume a paused session. */
-	resume() {
-		if (!this.activeTask || this.running) return;
-
-		// Check if another tab has the lock
-		if (!this._canAcquireLock()) {
-			this.conflictError = 'Timer is already running in another browser tab. Stop it first.';
-			return;
-		}
-
-		this.conflictError = null;
-		this._acquireLock();
-		this._beginTicking();
-	}
-
-	/** Pause the running timer. */
-	pause() {
-		if (!this.running) return;
-		this.running = false;
-		this._clearInterval();
-		this._releaseLock();
-		this._persist();
-	}
-
-	/** Save the session as Completed and reset. */
-	complete() {
-		if (!this.activeTask) return;
-		const endTime = Date.now();
-		const startTime = this.sessionStart ?? endTime - this.elapsed * 1000;
-
-		tasksStore.addSession({
-			client: this.activeTask.client,
-			project: this.activeTask.project,
-			task: this.activeTask.task,
-			status: 'completed',
-			startTime,
-			endTime,
-			duration: this.elapsed
-		});
-
-		this._reset(true);
-	}
-
-	/** Discard the current session without saving. */
-	cancel() {
-		this._reset(true);
-	}
-
-	/** Cleanup: must be called onDestroy to avoid memory leaks. */
-	cleanup() {
-		this._clearInterval();
-		this._releaseLock();
-		if (typeof window !== 'undefined') {
-			window.removeEventListener('storage', (e) => this._onStorageChange(e));
-		}
-	}
-
-	// ─── Private helpers ──────────────────────────────────────────────
-
-	/** Check if this tab can acquire the timer lock */
-	private _canAcquireLock(): boolean {
-		if (typeof window === 'undefined') return false;
-		
-		// If we already own the lock, we can continue
-		if (this._ownsLock) return true;
-		
-		const lockData = localStorage.getItem(TIMER_LOCK_KEY);
-		if (!lockData) return true; // No lock, we can acquire it
+	async function sync() {
+		if (!authStore.isAuthenticated) return;
 		
 		try {
-			const lock = JSON.parse(lockData);
-			// If lock is older than 30 seconds, consider it stale
-			if (Date.now() - lock.timestamp > 30000) return true;
-			// Lock is held by another tab
-			return false;
-		} catch {
-			return true; // Malformed lock, we can acquire it
+			const [activeRes, sessionsRes] = await Promise.all([
+				timerApi.getActive(),
+				timerApi.getSessions(20)
+			]);
+
+			activeTimer = activeRes.timer;
+			if (activeTimer && (activeTimer.status === 'active' || activeTimer.status === 'In Progress')) {
+				startTick();
+			} else {
+				stopTick();
+			}
+
+			if (sessionsRes && sessionsRes.sessions) {
+				sessions = sessionsRes.sessions.map(s => ({
+					id: s.id.toString(),
+					user: authStore.user?.username || 'User',
+					client: s.client,
+					project: s.project,
+					task: s.task,
+					status: s.status as TaskStatus,
+					startTime: s.start_time,
+					durationSeconds: s.duration_seconds
+				}));
+			}
+			conflictError = null;
+		} catch (e) {
+			console.error('[TimerStore] Sync failed', e);
 		}
 	}
 
-	/** Acquire the timer lock for this tab */
-	private _acquireLock() {
-		if (typeof window === 'undefined') return;
-		this._ownsLock = true;
-		localStorage.setItem(
-			TIMER_LOCK_KEY,
-			JSON.stringify({
-				instanceId: INSTANCE_ID,
-				timestamp: Date.now()
-			})
-		);
+	async function start(client: string, project: string, task: string) {
+		isLoading = true;
+		error = null;
+		conflictError = null;
+		
+		// Update local metadata
+		const c = client.trim();
+		const p = project.trim();
+		const t = task.trim();
+		
+		if (c && !clients.includes(c)) clients = [...clients, c];
+		if (c && p) {
+			const existing = projects[c] ?? [];
+			if (!existing.includes(p)) projects[c] = [...existing, p];
+			const key = `${c}::${p}`;
+			const tasks = knownTasks[key] ?? [];
+			if (t && !tasks.includes(t)) knownTasks[key] = [...tasks, t];
+		}
+		saveMetadata();
+
+		try {
+			const deviceInfo = { browser: navigator.userAgent, platform: navigator.platform };
+			const res = await timerApi.start(c, p, t, deviceInfo);
+			activeTimer = res.timer;
+			startTick();
+			await sync();
+		} catch (e: any) {
+			if (e.status === 409) {
+				conflictError = e.data?.message || 'Timer conflict';
+			} else {
+				error = e.message;
+			}
+		} finally {
+			isLoading = false;
+		}
 	}
 
-	/** Release the timer lock */
-	private _releaseLock() {
-		if (typeof window === 'undefined') return;
-		const lockData = localStorage.getItem(TIMER_LOCK_KEY);
-		if (lockData) {
-			try {
-				const lock = JSON.parse(lockData);
-				if (lock.instanceId === INSTANCE_ID) {
-					localStorage.removeItem(TIMER_LOCK_KEY);
-					this._ownsLock = false;
+	async function startFromGithubIssue(issue: { number: number; title: string }) {
+		const taskTitle = `#${issue.number} ${issue.title}`.trim();
+		await start('GitHub', 'Issues', taskTitle);
+	}
+
+	async function pause(id?: string | number) {
+		const targetId = id || activeTimer?.id;
+		if (!targetId) return;
+		isLoading = true;
+		try {
+			const res = await timerApi.pause(targetId, { browser: navigator.userAgent });
+			activeTimer = res.timer;
+			stopTick();
+			await sync();
+		} catch (e: any) {
+			error = e.message;
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function resume(id?: string | number) {
+		const targetId = id || activeTimer?.id;
+		if (!targetId) return;
+		isLoading = true;
+		try {
+			const res = await timerApi.resume(targetId, { browser: navigator.userAgent });
+			activeTimer = res.timer;
+			startTick();
+			await sync();
+		} catch (e: any) {
+			if (e.status === 409) {
+				conflictError = e.data?.message || 'Timer conflict';
+			} else {
+				error = e.message;
+			}
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function complete(id?: string | number) {
+		const targetId = id || activeTimer?.id;
+		if (!targetId) return;
+		isLoading = true;
+		try {
+			await timerApi.complete(targetId, { browser: navigator.userAgent });
+			if (activeTimer?.id === targetId) {
+				activeTimer = null;
+				stopTick();
+			}
+			await sync();
+		} catch (e: any) {
+			error = e.message;
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function discard(id?: string | number) {
+		const targetId = id || activeTimer?.id;
+		if (!targetId) return;
+		if (!confirm('Are you sure you want to discard this session?')) return;
+		isLoading = true;
+		try {
+			await timerApi.discard(targetId, { browser: navigator.userAgent });
+			if (activeTimer?.id === targetId) {
+				activeTimer = null;
+				stopTick();
+			}
+			await sync();
+		} catch (e: any) {
+			error = e.message;
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function getReport(): ReportUser[] {
+		const map = new Map<string, Map<string, Map<string, Map<string, number>>>>();
+
+		for (const s of sessions) {
+			if (!map.has(s.user)) map.set(s.user, new Map());
+			const clientMap = map.get(s.user)!;
+			if (!clientMap.has(s.client)) clientMap.set(s.client, new Map());
+			const pMap = clientMap.get(s.client)!;
+			if (!pMap.has(s.project)) pMap.set(s.project, new Map());
+			const tMap = pMap.get(s.project)!;
+			tMap.set(s.task, (tMap.get(s.task) ?? 0) + s.durationSeconds);
+		}
+
+		const report: ReportUser[] = [];
+		for (const [user, clientMap] of map) {
+			const clients: ReportClient[] = [];
+			let userTotal = 0;
+			for (const [client, pMap] of clientMap) {
+				const projects: ReportProject[] = [];
+				let clientTotal = 0;
+				for (const [project, tMap] of pMap) {
+					const tasks: ReportTask[] = [];
+					let projectTotal = 0;
+					for (const [task, secs] of tMap) {
+						tasks.push({ task, seconds: secs });
+						projectTotal += secs;
+					}
+					projects.push({ project, seconds: projectTotal, tasks });
+					clientTotal += projectTotal;
 				}
-			} catch {
-				// Ignore
+				clients.push({ client, seconds: clientTotal, projects });
+				userTotal += clientTotal;
 			}
+			report.push({ user, seconds: userTotal, clients });
 		}
+		return report;
 	}
 
-	/** Handle storage changes from other tabs */
-	private _onStorageChange(e: StorageEvent) {
-		// If another tab started/stopped the timer, refresh our state
-		if (e.key === ACTIVE_KEY && e.newValue && e.oldValue !== e.newValue) {
-			try {
-				const newData = JSON.parse(e.newValue);
-				this.elapsed = newData.elapsed ?? this.elapsed;
-				this.activeTask = newData.activeTask ?? this.activeTask;
-				this.sessionStart = newData.sessionStart ?? this.sessionStart;
-			} catch {
-				// Ignore
+	return {
+		get activeTimer() { return activeTimer; },
+		get sessions() { return sessions; },
+		get isLoading() { return isLoading; },
+		get error() { return error; },
+		get conflictError() { return conflictError; },
+		get clients() { return clients; },
+		get projects() { return projects; },
+		get knownTasks() { return knownTasks; },
+		
+		get pausedTimers() {
+			return sessions.filter(s => s.status === 'paused');
+		},
+
+		get totalTodaySeconds() {
+			const today = new Date().toDateString();
+			const sessionTotal = sessions
+				.filter(s => new Date(s.startTime).toDateString() === today)
+				.reduce((acc, s) => acc + s.durationSeconds, 0);
+			return sessionTotal + this.elapsedSeconds;
+		},
+
+		get elapsedSeconds() {
+			void _tick; // reactive dependency
+			if (!activeTimer) return 0;
+			return calcElapsedSeconds({
+				startTime: activeTimer.start_time,
+				elapsedSeconds: activeTimer.duration_seconds,
+				running: activeTimer.status === 'active' || activeTimer.status === 'In Progress'
+			});
+		},
+
+		init: () => {
+			loadMetadata();
+		},
+		sync,
+		start,
+		startFromGithubIssue,
+		pause,
+		resume,
+		complete,
+		discard,
+		
+		getProjects: (c: string) => projects[c] ?? [],
+		getTasks: (c: string, p: string) => knownTasks[`${c}::${p}`] ?? [],
+		
+		getUserTotalTodaySeconds: (targetUser: string) => {
+			void _tick; // reactive
+			const today = new Date().toDateString();
+			const sessionTotal = sessions
+				.filter(s => s.user === targetUser && new Date(s.startTime).toDateString() === today)
+				.reduce((acc, s) => acc + s.durationSeconds, 0);
+			
+			let activeExtra = 0;
+			if (activeTimer && (authStore.user?.username === targetUser)) {
+				const timerDate = new Date(activeTimer.start_time).toDateString();
+				if (timerDate === today) {
+					activeExtra = timerStore.elapsedSeconds;
+				}
 			}
-		}
-
-		// Check if lock was released by another tab
-		if (e.key === TIMER_LOCK_KEY && !e.newValue) {
-			this._ownsLock = false;
-		}
-	}
-
-	private _beginTicking() {
-		this.running = true;
-		// Refresh lock every 10 seconds to prevent stale locks
-		this._iid = setInterval(() => {
-			this.elapsed++;
-			this._persist();
-			if (this._ownsLock) {
-				this._acquireLock(); // Refresh timestamp
+			return sessionTotal + activeExtra;
+		},
+		getTimerForIssue: (issueNumber: number) => {
+			void _tick; // reactive
+			const prefix = `#${issueNumber} `;
+			if (activeTimer && activeTimer.client === 'GitHub' && activeTimer.project === 'Issues' && activeTimer.task.startsWith(prefix)) {
+				return { 
+					id: activeTimer.id, 
+					running: activeTimer.status === 'active' || activeTimer.status === 'In Progress',
+					elapsedSeconds: timerStore.elapsedSeconds
+				};
 			}
-		}, 1000);
-	}
-
-	private _clearInterval() {
-		if (this._iid !== null) {
-			clearInterval(this._iid);
-			this._iid = null;
-		}
-	}
-
-	private _reset(clearStorage = false) {
-		this.running = false;
-		this._clearInterval();
-		this._releaseLock();
-		this.elapsed = 0;
-		this.activeTask = null;
-		this.sessionStart = null;
-		this.conflictError = null;
-		if (clearStorage && typeof window !== 'undefined') {
-			localStorage.removeItem(ACTIVE_KEY);
-		}
-	}
-
-	private _persist() {
-		if (typeof window === 'undefined') return;
-		localStorage.setItem(
-			ACTIVE_KEY,
-			JSON.stringify({
-				elapsed: this.elapsed,
-				activeTask: this.activeTask,
-				sessionStart: this.sessionStart
-			})
-		);
-	}
+			const paused = sessions.find(s => s.client === 'GitHub' && s.project === 'Issues' && s.task.startsWith(prefix) && s.status === 'paused');
+			if (paused) {
+				return { 
+					id: paused.id, 
+					running: false, 
+					elapsedSeconds: paused.durationSeconds 
+				};
+			}
+			return undefined;
+		},
+		setUserShiftGoal: (user: string, hours: number) => {
+			shiftGoals[user] = hours;
+			saveMetadata();
+		},
+		getShiftGoal: (user: string) => shiftGoals[user] || 8,
+		
+		getReport,
+		formatDuration,
+		destroy: stopTick
+	};
 }
 
-export const timerStore = new TimerStore();
+export const timerStore = createTimerStore();
+
+// ─── Report types ─────────────────────────────────────────────────────────────
+
+export interface ReportTask {
+	task: string;
+	seconds: number;
+}
+export interface ReportProject {
+	project: string;
+	seconds: number;
+	tasks: ReportTask[];
+}
+export interface ReportClient {
+	client: string;
+	seconds: number;
+	projects: ReportProject[];
+}
+export interface ReportUser {
+	user: string;
+	seconds: number;
+	clients: ReportClient[];
+}

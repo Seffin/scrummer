@@ -7,9 +7,13 @@ const __dirname = path.dirname(__filename);
 
 export interface User {
   id: number;
-  github_id: string;
+  github_id?: string;
+  github_username?: string;
+  github_token?: string;
+  google_id?: string;
   username: string;
   email?: string;
+  password_hash?: string;
   avatar_url?: string;
   created_at: string;
   updated_at: string;
@@ -112,6 +116,14 @@ export class DatabaseService {
 
   getUserByGithubId(githubId: string): User | null {
     return this.data.users.find(user => user.github_id === githubId) || null;
+  }
+
+  getUserByGoogleId(googleId: string): User | null {
+    return this.data.users.find(user => user.google_id === googleId) || null;
+  }
+
+  getUserByEmail(email: string): User | null {
+    return this.data.users.find(user => user.email === email) || null;
   }
 
   updateUser(id: number, updates: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>): User | null {

@@ -1,17 +1,18 @@
 <script lang="ts">
-	import { tracker } from '$lib/stores/tracker.svelte';
+	import { timerStore } from '$lib/stores/timer.svelte';
+	import { formatDuration } from '$lib/utils/timeUtils';
 
 	let { user } = $props<{ user: string }>();
 
-	let totalSeconds = $derived(tracker.getUserTotalTodaySeconds(user));
-	let shiftGoalHours = $derived(tracker.getUserShiftGoalHours(user));
+	let totalSeconds = $derived(timerStore.getUserTotalTodaySeconds(user));
+	let shiftGoalHours = $derived(timerStore.getShiftGoal(user));
 	let shiftGoalSeconds = $derived(shiftGoalHours * 3600);
 	let percent = $derived(Math.min(100, Math.round((totalSeconds / shiftGoalSeconds) * 100)));
 
 	function handleShiftChange(e: Event) {
 		const val = Number((e.target as HTMLInputElement).value);
 		if (!isNaN(val) && val > 0) {
-			tracker.setUserShiftGoal(user, val);
+			timerStore.setUserShiftGoal(user, val);
 		}
 	}
 </script>
@@ -23,7 +24,7 @@
 			<span class="text-sm font-medium">{user}</span>
 		</div>
 		<div class="flex items-center gap-1.5">
-			<span>{tracker.formatDuration(totalSeconds)} /</span>
+			<span>{formatDuration(totalSeconds)} /</span>
 			<input
 				type="number"
 				min="1"

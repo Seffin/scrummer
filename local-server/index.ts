@@ -12,7 +12,7 @@ const app = new Hono();
 
 // CORS configuration
 app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -37,6 +37,28 @@ app.get('/health', (c) => {
 });
 
 // Authentication endpoints
+app.post('/api/auth/register', async (c) => {
+  try {
+    const { email, password, username } = await c.req.json();
+    const { user, tokens } = await authService.register(email, password, username);
+    return c.json({ user, ...tokens });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return c.json({ error: error instanceof Error ? error.message : 'Registration failed' }, 400);
+  }
+});
+
+app.post('/api/auth/login-email', async (c) => {
+  try {
+    const { email, password } = await c.req.json();
+    const { user, tokens } = await authService.login(email, password);
+    return c.json({ user, ...tokens });
+  } catch (error) {
+    console.error('Email login error:', error);
+    return c.json({ error: error instanceof Error ? error.message : 'Login failed' }, 401);
+  }
+});
+
 app.post('/api/auth/login', async (c) => {
   try {
     const body = await c.req.json();
@@ -45,6 +67,17 @@ app.post('/api/auth/login', async (c) => {
   } catch (error) {
     console.error('Auth login error:', error);
     return c.json({ error: 'Authentication failed' }, 500);
+  }
+});
+
+app.post('/api/auth/login-google', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { user, tokens } = await authService.authenticateGoogleUser(body);
+    return c.json({ user, ...tokens });
+  } catch (error) {
+    console.error('Google login error:', error);
+    return c.json({ error: 'Google authentication failed' }, 500);
   }
 });
 
@@ -58,17 +91,36 @@ app.get('/api/auth/me', authMiddleware, async (c) => {
   }
 });
 
+app.put('/api/auth/profile', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const updatedUser = await authService.updateUserProfile(user, body);
+    return c.json({ user: updatedUser });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    return c.json({ error: error instanceof Error ? error.message : 'Update failed' }, 500);
+  }
+});
+
 app.post('/api/auth/logout', authMiddleware, async (c) => {
   try {
     const authHeader = c.req.header('Authorization');
+    console.log('[API] Logout request received');
     const token = authService.extractTokenFromHeader(authHeader);
+    
     if (token) {
       authService.logout(token);
+      console.log('[API] Token invalidated successfully');
     }
+    
     return c.json({ message: 'Logged out successfully' });
   } catch (error) {
-    console.error('Auth logout error:', error);
-    return c.json({ error: 'Failed to logout' }, 500);
+    console.error('❌ Auth logout error:', error);
+    return c.json({ 
+      error: 'Failed to logout', 
+      details: error instanceof Error ? error.message : String(error) 
+    }, 500);
   }
 });
 
@@ -332,4 +384,5 @@ console.log(`🔗 Health check: http://localhost:${port}/health`);
 serve({
   fetch: app.fetch,
   port,
+  hostname: '0.0.0.0'
 });

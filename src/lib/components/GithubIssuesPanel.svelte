@@ -1,18 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { GithubIssue } from '$lib/github/types';
-	import { tracker } from '$lib/stores/tracker.svelte';
+	import { timerStore } from '$lib/stores/timer.svelte';
 	import { githubStore } from '$lib/stores/github.svelte';
 	import { GitHubAuthError, getUserProfile, getUserOrgs, getUserRepos, getRepoIssues, githubGet } from '$lib/github/api';
 	import { handleLogout, showLoginPrompt, type LoginState } from '$lib/github/login-flow';
 	import { getAuthState } from '$lib/github/auth';
 	import GithubIssueCreateModal from './GithubIssueCreateModal.svelte';
 	import DeviceAuthModal from './DeviceAuthModal.svelte';
+	import { formatDuration } from '$lib/utils/timeUtils';
+	import { githubAuthStore } from '$lib/stores/githubAuth.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	let { issues = [] }: { issues?: GithubIssue[] } = $props();
 
-	// Authentication state
-	let isAuthenticated = $state(false);
+	// Authentication state (derived from global store)
+	const isAuthenticated = $derived(githubAuthStore.isAuthenticated);
 	let loginState = $state<LoginState>({ isShowing: false, isLoading: false });
 	let authError = $state('');
 	let showDeviceAuthModal = $state(false);
@@ -33,13 +36,22 @@
 
 	const displayedIssues = $derived(issues.length > 0 ? issues : githubStore.filteredIssues);
 
-	// Authentication initialization is now handled in onMount
+	// Automatically load data when authenticated
+	$effect(() => {
+		if (isAuthenticated) {
+			console.log('🚀 Authenticated, loading data...');
+			loginState = { isShowing: false, isLoading: false };
+			authError = '';
+			loadOwners();
+			loadUserRepos();
+		} else {
+			loginState = showLoginPrompt();
+		}
+	});
 
 	async function handleDeviceAuthSuccess() {
 		showDeviceAuthModal = false;
-		isAuthenticated = true;
-		loginState = { isShowing: false, isLoading: false };
-		authError = '';
+		githubAuthStore.refresh();
 		await loadOwners();
 		await loadUserRepos();
 	}
@@ -50,9 +62,7 @@
 			return;
 		}
 		console.log('🚪 Logging out...');
-		loginState = handleLogout();
-		isAuthenticated = false;
-		showDeviceAuthModal = false;
+		githubAuthStore.logout();
 		owners = [];
 		repos = [];
 		owner = '';
@@ -67,18 +77,13 @@
 	// Monitor authentication state changes
 	$effect(() => {
 		console.log('🔄 Auth state changed:', { isAuthenticated, loginState, errorSource });
+	});
 		
-		// Force login prompt if not authenticated
-		if (!isAuthenticated && !loginState.isShowing) {
-			console.log('🔄 Not authenticated but login prompt not showing, forcing it to show');
-			loginState = showLoginPrompt();
-		}
-		
-		// Force login prompt if there are authentication errors
+	// Force logout if there are authentication errors
+	$effect(() => {
 		if (errorSource === 'owners' || errorSource === 'repos') {
-			console.log('🔄 Authentication error detected, forcing login prompt');
-			isAuthenticated = false;
-			loginState = showLoginPrompt();
+			console.log('🔄 Authentication error detected, triggering logout');
+			githubAuthStore.logout();
 		}
 	});
 
@@ -90,7 +95,7 @@
 	}
 
 	function startFromIssue(issue: GithubIssue) {
-		tracker.startTimerFromGithubIssue(issue, tracker.state.currentUser);
+		timerStore.startFromGithubIssue(issue);
 	}
 
 	async function loadOwners() {
@@ -136,8 +141,7 @@
 				console.log('📋 Authentication error detected, forcing re-authentication');
 				githubStore.setError('GitHub authentication failed. Please check your token.');
 				// Force re-authentication
-				isAuthenticated = false;
-				loginState = showLoginPrompt();
+				githubAuthStore.logout();
 				authError = 'Your GitHub token is invalid or expired. Please authenticate again.';
 			} else {
 				githubStore.setError(e?.message ?? 'Failed to load owner options');
@@ -161,8 +165,7 @@
 				console.log('📋 Authentication error in repos loading, forcing re-authentication');
 				githubStore.setError('GitHub authentication failed. Please check your token.');
 				// Force re-authentication
-				isAuthenticated = false;
-				loginState = showLoginPrompt();
+				githubAuthStore.logout();
 				authError = 'Your GitHub token is invalid or expired. Please authenticate again.';
 			} else {
 				githubStore.setError(e?.message ?? 'Failed to load repository options');
@@ -223,25 +226,6 @@
 		void loadRepos(owner);
 	});
 
-	onMount(() => {
-		console.log('🚀 Component mounted, checking authentication...');
-		void (async () => {
-			const token = getAuthState();
-			console.log('🚀 Token in session:', token);
-
-			if (token.isAuthenticated) {
-				isAuthenticated = true;
-				loginState = { isShowing: false, isLoading: false };
-				authError = '';
-				await loadOwners();
-				await loadUserRepos();
-				return;
-			}
-
-			isAuthenticated = false;
-			loginState = showLoginPrompt();
-		})();
-	});
 
 	async function loadIssues() {
 		if (!owner.trim() || !repo.trim()) return;
@@ -491,7 +475,7 @@
 					</div>
 				{:else}
 					{#each displayedIssues as issue (issue.number)}
-						{@const timer = tracker.getTimerForIssue(issue.number)}
+						{@const timer = timerStore.getTimerForIssue(issue.number)}
 						<div
 							class="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-indigo-300 hover:shadow-md dark:border-white/5 dark:bg-slate-800/50 dark:hover:border-white/20"
 						>
@@ -560,19 +544,19 @@
 												class="flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400"
 											>
 												<span class="h-2 w-2 animate-pulse rounded-full bg-emerald-500"></span>
-												{tracker.formatDuration(timer.elapsedSeconds)}
+												{formatDuration(timer.elapsedSeconds)}
 											</span>
 											<div class="flex items-center gap-2">
 												<button
 													class="rounded-xl bg-slate-200 p-2 text-slate-700 transition-colors hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
-													onclick={() => tracker.pauseTimer(timer.id)}
+													onclick={() => timerStore.pause()}
 													title="Pause"
 												>
 													⏸️
 												</button>
 												<button
 													class="rounded-xl bg-emerald-600 p-2 text-white transition-colors hover:bg-emerald-500"
-													onclick={() => tracker.completeTimer(timer.id)}
+													onclick={() => timerStore.complete()}
 													title="Complete"
 												>
 													✅
@@ -584,19 +568,19 @@
 											<span
 												class="flex items-center gap-1 rounded-lg bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-400"
 											>
-												⏸️ {tracker.formatDuration(timer.elapsedSeconds)}
+												⏸️ {formatDuration(timer.elapsedSeconds)}
 											</span>
 											<div class="flex items-center gap-2">
 												<button
 													class="rounded-xl bg-indigo-600 p-2 text-white transition-colors hover:bg-indigo-500"
-													onclick={() => tracker.resumeTimer(timer.id)}
+													onclick={() => timerStore.resume()}
 													title="Resume"
 												>
 													▶️
 												</button>
 												<button
 													class="rounded-xl bg-emerald-600 p-2 text-white transition-colors hover:bg-emerald-500"
-													onclick={() => tracker.completeTimer(timer.id)}
+													onclick={() => timerStore.complete()}
 													title="Complete"
 												>
 													✅
