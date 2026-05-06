@@ -4,8 +4,8 @@ const listGithubOwnersMock = vi.fn();
 const listGithubReposMock = vi.fn();
 
 vi.mock('$lib/server/github/options', () => ({
-	listGithubOwners: listGithubOwnersMock,
-	listGithubRepos: listGithubReposMock
+	listGithubOwners: () => listGithubOwnersMock(),
+	listGithubRepos: (...args: any[]) => listGithubReposMock(...args)
 }));
 
 describe('GET /api/github/options/owners', () => {

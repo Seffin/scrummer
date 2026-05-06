@@ -1,7 +1,35 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { vi } from 'vitest';
 import GithubIssuesPanel from './GithubIssuesPanel.svelte';
+
+// Mock the auth store to be authenticated by default in tests
+vi.mock('$lib/stores/githubAuth.svelte', () => ({
+	githubAuthStore: {
+		isAuthenticated: true,
+		token: 'mock-token',
+		logout: vi.fn(),
+		authenticate: vi.fn(),
+		refresh: vi.fn()
+	}
+}));
+
+// Mock the github store to avoid real API calls
+vi.mock('$lib/stores/github.svelte', () => ({
+	githubStore: {
+		owners: [],
+		repos: [],
+		issues: [],
+		loading: false,
+		error: null,
+		filteredIssues: [],
+		loadOwners: vi.fn(),
+		loadRepos: vi.fn(),
+		loadIssues: vi.fn(),
+		setError: vi.fn()
+	}
+}));
 
 describe('GithubIssuesPanel', () => {
 	it('renders issue metadata and start button', async () => {
