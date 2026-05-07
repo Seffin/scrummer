@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { clearToken, clearGitHubTokenReadableCookie } from '$lib/auth/tokenStorage';
 
 export interface User {
 	id: number;
@@ -188,7 +189,11 @@ export function createAuthStore() {
 				headers: { 'Authorization': `Bearer ${token}` }
 			}).catch(() => {});
 		}
+		// Clear all auth tokens from browser
 		setToken(null);
+		clearToken(); // Clear GitHub PAT from localStorage
+		clearGitHubTokenReadableCookie(); // Clear GitHub token cookie
+		console.log('[AuthStore] Logged out, all tokens cleared from browser');
 	}
 
 	async function syncGithubToken(githubToken: string | null) {
