@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { deviceFlowService } from '$lib/github/device-flow';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 
@@ -10,19 +11,27 @@
 	let showPassword = $state(false);
 	let backendOnline = $state<boolean | null>(null);
 	let error = $state<string | null>(null);
+	let deviceFlow = $state(false);
+	let deviceCode = $state('');
+	let verificationUrl = $state('');
+	let loading = $state(false);
 
 	onMount(async () => {
 		if (authStore.isAuthenticated) {
 			goto('/');
 		}
 		
-		// Check backend health
-		try {
-			const res = await fetch(`http://${window.location.hostname}:3001/health`);
-			backendOnline = res.ok;
-		} catch (e) {
-			backendOnline = false;
-		}
+		// Setup device flow status listener
+		deviceFlowService.onStatusChange = (status, tokenData) => {
+			console.log('[Login] OAuth status:', status);
+			if (status === 'authorized' && tokenData) {
+				// Token received - exchange for user and login
+				exchangeTokenForUser(tokenData.access_token);
+			} else if (status === 'error' || status === 'expired_token' || status === 'authorization_declined') {
+				error = 'GitHub authorization failed or was declined.';
+				loading = false;
+			}
+		};
 	});
 
 	async function handleSubmit(e: Event) {
@@ -45,20 +54,53 @@
 		}
 	}
 
-	async function loginWithGitHub() {
-		// In a real app, this would redirect to GitHub OAuth
-		// For this local dev environment, we'll simulate it by calling the CLI
+	async function exchangeTokenForUser(accessToken: string) {
 		try {
-			const res = await fetch(`http://${window.location.hostname}:3001/api/github/cli/user`, { method: 'POST' });
-			const data = await res.json();
-			if (data.user) {
-				const success = await authStore.loginGitHub(data.user);
-				if (success) goto('/');
-			} else {
-				error = "GitHub CLI not authenticated. Please run 'gh auth login'.";
+			// Fetch GitHub user with the OAuth token
+			const res = await fetch('https://api.github.com/user', {
+				headers: {
+					'Authorization': `Bearer ${accessToken}`,
+					'Accept': 'application/json'
+				}
+			});
+			if (!res.ok) {
+				throw new Error('Failed to fetch GitHub user');
 			}
-		} catch (e) {
-			error = "Failed to connect to local auth server. Ensure the backend is running.";
+			const githubUser = await res.json();
+			
+			// Login with GitHub user data
+			const success = await authStore.loginGitHub({
+				id: githubUser.id,
+				username: githubUser.login,
+				email: githubUser.email || `${githubUser.login}@github.com`,
+				avatar: githubUser.avatar_url
+			});
+			if (success) {
+				goto('/');
+			}
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to complete GitHub login';
+			loading = false;
+		}
+	}
+
+	async function loginWithGitHub() {
+		// Use OAuth device flow - requires explicit authorization on GitHub.com
+		// This prevents silent re-login and allows switching accounts
+		loading = true;
+		error = null;
+		deviceFlow = true;
+		
+		try {
+			console.log('[Login] Initiating GitHub OAuth device flow...');
+			const state = await deviceFlowService.initiateDeviceFlow();
+			deviceCode = state.userCode;
+			verificationUrl = state.verificationUri;
+			deviceFlowService.startPolling();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to initiate GitHub login';
+			loading = false;
+			deviceFlow = false;
 		}
 	}
 
