@@ -68,12 +68,13 @@
 			}
 			const githubUser = await res.json();
 			
-			// Login with GitHub user data
+			// Login with GitHub user data AND OAuth token (stored in backend per-user)
 			const success = await authStore.loginGitHub({
 				id: githubUser.id,
-				username: githubUser.login,
+				login: githubUser.login,
 				email: githubUser.email || `${githubUser.login}@github.com`,
-				avatar: githubUser.avatar_url
+				avatar_url: githubUser.avatar_url,
+				github_token: accessToken // Store OAuth token in backend
 			});
 			if (success) {
 				goto('/');

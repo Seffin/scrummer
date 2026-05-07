@@ -1,10 +1,11 @@
 import { serve } from '@hono/node-server';
-import { Hono } from 'hono';
+import { Hono, Context, Next } from 'hono';
 import { cors } from 'hono/cors';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { authService } from './auth.js';
 import { timerService, TimerConflictError } from './timer.js';
+import { db } from './database.js';
 
 const execAsync = promisify(exec);
 
@@ -18,7 +19,7 @@ app.use('*', cors({
 }));
 
 // Authentication middleware
-const authMiddleware = async (c: any, next: any) => {
+const authMiddleware = async (c: Context, next: Next) => {
   const user = authService.authenticateRequest(c);
   if (!user) {
     return c.json({ error: 'Unauthorized' }, 401);
@@ -108,18 +109,46 @@ app.post('/api/auth/logout', authMiddleware, async (c) => {
     const authHeader = c.req.header('Authorization');
     console.log('[API] Logout request received');
     const token = authService.extractTokenFromHeader(authHeader);
-    
-    if (token) {
-      authService.logout(token);
-      console.log('[API] Token invalidated successfully');
+    const user = c.get('user');
+
+    if (token && user) {
+      await authService.logoutWithGitHubRevoke(token, user);
+      console.log('[API] Token and GitHub token revoked successfully');
     }
-    
+
     return c.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('❌ Auth logout error:', error);
-    return c.json({ 
-      error: 'Failed to logout', 
-      details: error instanceof Error ? error.message : String(error) 
+    return c.json({
+      error: 'Failed to logout',
+      details: error instanceof Error ? error.message : String(error)
+    }, 500);
+  }
+});
+
+app.post('/api/auth/github/logout', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    console.log('[API] GitHub logout request received for user:', user.id);
+
+    // Revoke GitHub token if present
+    if (user.github_token && user.github_token !== 'local_cli_authenticated') {
+      await authService.revokeGitHubToken(user.github_token);
+      console.log('[API] GitHub token revoked from GitHub');
+    }
+
+    // Clear GitHub token from database
+    const updatedUser = db.updateUser(user.id, { github_token: null });
+    if (updatedUser) {
+      console.log('[API] GitHub token cleared from database');
+    }
+
+    return c.json({ message: 'GitHub disconnected successfully' });
+  } catch (error) {
+    console.error('❌ GitHub logout error:', error);
+    return c.json({
+      error: 'Failed to disconnect GitHub',
+      details: error instanceof Error ? error.message : String(error)
     }, 500);
   }
 });

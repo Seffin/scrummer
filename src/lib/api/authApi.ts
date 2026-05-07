@@ -34,9 +34,12 @@ export const authApi = {
 			body: JSON.stringify(body)
 		}),
 
-	logout: () => 
+	logout: () =>
 		apiFetch<void>('/auth/logout', { method: 'POST' }).catch(() => {}),
-	
+
+	logoutGitHub: () =>
+		apiFetch<void>('/auth/github/logout', { method: 'POST' }),
+
 	updateProfile: (body: object) =>
 		apiFetch<{ user: User }>('/auth/profile', {
 			method: 'PUT',

@@ -17,6 +17,7 @@ export interface LoginRequest {
   username: string;
   email?: string;
   avatar_url?: string;
+  github_token?: string; // OAuth access token for API calls
 }
 
 export interface AuthTokens {
@@ -91,20 +92,21 @@ export class AuthService {
     }
 
     if (!user) {
-      // Create new user
+      // Create new user with OAuth token
       user = db.createUser({
         github_id: loginData.github_id,
         github_username: loginData.username,
-        github_token: loginData.github_id ? 'local_cli_authenticated' : null,
+        github_token: loginData.github_token || (loginData.github_id ? 'local_cli_authenticated' : null),
         username: loginData.username,
         email: loginData.email,
         avatar_url: loginData.avatar_url,
       });
     } else {
-      // Update user with latest info
+      // Update user with latest info and OAuth token
       user = db.updateUser(user.id, {
         github_username: loginData.username || user.github_username,
-        avatar_url: loginData.avatar_url || user.avatar_url
+        avatar_url: loginData.avatar_url || user.avatar_url,
+        github_token: loginData.github_token || user.github_token
       })!;
     }
 
@@ -264,6 +266,45 @@ export class AuthService {
    * Logout user (invalidate token)
    */
   logout(token: string): void {
+    tokenStore.delete(token);
+  }
+
+  /**
+   * Revoke GitHub OAuth token globally
+   */
+  async revokeGitHubToken(githubToken: string): Promise<boolean> {
+    if (!githubToken || githubToken === 'local_cli_authenticated') {
+      return false;
+    }
+
+    try {
+      const response = await fetch('https://api.github.com/applications/grants', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github+json',
+        },
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Failed to revoke GitHub token:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Logout user with GitHub token revocation
+   */
+  async logoutWithGitHubRevoke(token: string, user: AuthUser): Promise<void> {
+    // Revoke GitHub token if present
+    if (user.github_token) {
+      await this.revokeGitHubToken(user.github_token);
+    }
+
+    // Clear GitHub token from database
+    db.updateUser(user.id, { github_token: null });
+
+    // Invalidate local app token
     tokenStore.delete(token);
   }
 }

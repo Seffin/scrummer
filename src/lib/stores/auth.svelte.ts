@@ -1,5 +1,4 @@
 import { browser } from '$app/environment';
-import { clearToken, clearGitHubTokenReadableCookie } from '$lib/auth/tokenStorage';
 
 export interface User {
 	id: number;
@@ -19,6 +18,7 @@ const API_BASE = browser
 export function createAuthStore() {
 	let token = $state<string | null>(null);
 	let user = $state<User | null>(null);
+	let githubDisconnected = $state(false); // Flag to prevent auto-reconnection
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 
@@ -29,8 +29,14 @@ export function createAuthStore() {
 		try {
 			user = JSON.parse(storedUser);
 		} catch (e) {
-			console.error('Failed to parse stored user', e);
+			localStorage.removeItem('auth_user');
 		}
+	}
+
+	// Load githubDisconnected flag from localStorage
+	const storedDisconnected = localStorage.getItem('github_disconnected');
+	if (storedDisconnected === 'true') {
+		githubDisconnected = true;
 	}
 
 	function setToken(newToken: string | null, newUser: User | null = null) {
@@ -96,7 +102,7 @@ export function createAuthStore() {
 		}
 	}
 
-	async function loginGitHub(githubData: any) {
+	async function loginGitHub(githubData: { id: number; login: string; email?: string; avatar_url?: string; github_token?: string }) {
 		loading = true;
 		error = null;
 		try {
@@ -107,11 +113,15 @@ export function createAuthStore() {
 					github_id: githubData.id.toString(),
 					username: githubData.login,
 					email: githubData.email,
-					avatar_url: githubData.avatar_url
+					avatar_url: githubData.avatar_url,
+					github_token: githubData.github_token
 				})
 			});
 			const data = await res.json();
 			if (!res.ok) throw new Error(data.error || 'GitHub login failed');
+			// Reset disconnected flag when user explicitly logs in again
+			githubDisconnected = false;
+			if (browser) localStorage.setItem('github_disconnected', 'false');
 			setToken(data.access_token, data.user);
 			return true;
 		} catch (e) {
@@ -122,7 +132,7 @@ export function createAuthStore() {
 		}
 	}
 
-	async function loginGoogle(googleData: any) {
+	async function loginGoogle(googleData: { sub: string; name: string; email: string; picture: string }) {
 		loading = true;
 		error = null;
 		try {
@@ -180,6 +190,40 @@ export function createAuthStore() {
 				void fetchMe();
 			}
 		});
+
+		// Poll for GitHub token status every 30 seconds to catch disconnections/logins from other devices
+		setInterval(() => {
+			if (token && user) {
+				const hadGitHubToken = !!user.github_token && user.github_token !== 'local_cli_authenticated';
+				void fetchMe().then(() => {
+					const hasGitHubToken = !!user?.github_token && user.github_token !== 'local_cli_authenticated';
+
+					// Case 1: Token was revoked from another device → disconnect
+					if (hadGitHubToken && !hasGitHubToken) {
+						console.log('[AuthStore] GitHub token was revoked from another device, disconnecting...');
+						// Set flag to prevent auto-reconnection
+						githubDisconnected = true;
+						if (browser) localStorage.setItem('github_disconnected', 'true');
+						// Clear local GitHub session token
+						import('$lib/github/auth').then(({ removeGitHubToken }) => {
+							removeGitHubToken();
+						});
+					}
+
+					// Case 2: Token was added on another device → auto-login
+					if (!hadGitHubToken && hasGitHubToken && githubDisconnected) {
+						console.log('[AuthStore] GitHub token was added on another device, auto-connecting...');
+						// Clear disconnected flag
+						githubDisconnected = false;
+						if (browser) localStorage.setItem('github_disconnected', 'false');
+						// Clear local session token to use server token
+						import('$lib/github/auth').then(({ removeGitHubToken }) => {
+							removeGitHubToken();
+						});
+					}
+				});
+			}
+		}, 30000); // Check every 30 seconds
 	}
 
 	function logout() {
@@ -189,11 +233,38 @@ export function createAuthStore() {
 				headers: { 'Authorization': `Bearer ${token}` }
 			}).catch(() => {});
 		}
-		// Clear all auth tokens from browser
+		// Clear app auth tokens from browser
+		// GitHub tokens are now stored in backend and revoked globally via API
 		setToken(null);
-		clearToken(); // Clear GitHub PAT from localStorage
-		clearGitHubTokenReadableCookie(); // Clear GitHub token cookie
-		console.log('[AuthStore] Logged out, all tokens cleared from browser');
+		// Clear disconnected flag on full logout
+		githubDisconnected = false;
+		if (browser) localStorage.setItem('github_disconnected', 'false');
+		console.log('[AuthStore] Logged out, GitHub token revoked from all devices');
+	}
+
+	async function logoutGitHub() {
+		if (!token) return;
+		try {
+			const res = await fetch(`${API_BASE}/auth/github/logout`, {
+				method: 'POST',
+				headers: { 'Authorization': `Bearer ${token}` }
+			});
+			if (res.ok) {
+				// Set flag to prevent auto-reconnection
+				githubDisconnected = true;
+				if (browser) localStorage.setItem('github_disconnected', 'true');
+
+				// Clear local GitHub session token to prevent auto-reconnection
+				const { removeGitHubToken } = await import('$lib/github/auth');
+				removeGitHubToken();
+
+				// Refresh user data to reflect GitHub disconnection
+				await fetchMe();
+				console.log('[AuthStore] GitHub disconnected successfully');
+			}
+		} catch (e) {
+			console.error('[AuthStore] GitHub logout error:', e);
+		}
 	}
 
 	async function syncGithubToken(githubToken: string | null) {
@@ -222,6 +293,7 @@ export function createAuthStore() {
 		get loading() { return loading; },
 		get error() { return error; },
 		get isAuthenticated() { return !!token; },
+		get githubDisconnected() { return githubDisconnected; },
 		register,
 		loginEmail,
 		loginGitHub,
@@ -229,7 +301,8 @@ export function createAuthStore() {
 		fetchMe,
 		setToken,
 		syncGithubToken,
-		logout
+		logout,
+		logoutGitHub
 	};
 }
 

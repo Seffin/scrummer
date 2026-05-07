@@ -19,6 +19,39 @@
 	let loginState = $state<LoginState>({ isShowing: false, isLoading: false });
 	let authError = $state('');
 	let showDeviceAuthModal = $state(false);
+	let githubDisconnectedNotification = $state(false);
+
+	// Monitor auth store for GitHub token changes (revoked/added from other devices)
+	$effect(() => {
+		// Case 1: Token revoked from another device
+		if (authStore.user && !authStore.user.github_token && isAuthenticated) {
+			// GitHub token was revoked from another device
+			// Clear local session token to prevent auto-reconnection
+			{ removeGitHubToken(); }
+			githubAuthStore.logout();
+			githubDisconnectedNotification = true;
+			owners = [];
+			repos = [];
+			owner = '';
+			repo = '';
+			githubStore.clearData();
+		}
+
+		// Case 2: Token added on this or another device (flag was cleared)
+		if (authStore.user && authStore.user.github_token && !authStore.githubDisconnected && !isAuthenticated) {
+			// GitHub token is available and flag is cleared, re-authenticate
+			console.log('[GithubIssuesPanel] Re-authenticating with GitHub token from server');
+			import('$lib/github/auth').then(({ authenticateWithToken }) => {
+				if (authStore.user.github_token && authStore.user.github_token !== 'local_cli_authenticated') {
+					try {
+						authenticateWithToken(authStore.user.github_token);
+					} catch (e) {
+						console.error('[GithubIssuesPanel] Failed to re-authenticate:', e);
+					}
+				}
+			});
+		}
+	});
 
 	// GitHub data state
 	let owner = $state('');
@@ -67,11 +100,12 @@
 	}
 
 	// Handle logout
-	function handleLogoutClick() {
-		if (!window.confirm('Are you sure you want to log out of GitHub? You will need to re-authenticate later.')) {
+	async function handleLogoutClick() {
+		if (!window.confirm('Are you sure you want to disconnect GitHub? This will remove your GitHub token from the server and all devices.')) {
 			return;
 		}
-		console.log('🚪 Logging out...');
+		console.log('🚪 Disconnecting GitHub from server...');
+		await authStore.logoutGitHub();
 		githubAuthStore.logout();
 		owners = [];
 		repos = [];
@@ -331,7 +365,32 @@
 					<p class="text-xs text-slate-500 dark:text-slate-400">Search and track issues from your repositories</p>
 				</div>
 			</div>
-			<div class="flex flex-wrap items-center gap-2 sm:gap-3">
+			<button
+				class="flex items-center gap-2 rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+				onclick={handleLogoutClick}
+			>
+				🚪 Disconnect
+			</button>
+		</div>
+
+		<!-- GitHub Disconnected Notification -->
+		{#if githubDisconnectedNotification}
+			<div class="mx-4 mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-700 backdrop-blur-sm dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+				<div class="flex items-center gap-3">
+					<span>🔔</span>
+					<span>GitHub was disconnected from another device. Please re-authenticate to continue.</span>
+				</div>
+				<button
+					class="font-semibold underline underline-offset-4 hover:text-amber-800 dark:hover:text-amber-200"
+					onclick={() => githubDisconnectedNotification = false}
+				>
+					Dismiss
+				</button>
+			</div>
+		{/if}
+
+		<div class="p-4 sm:p-6 lg:p-8">
+			<div class="flex flex-wrap items-center gap-2 sm:gap-3 mb-6">
 				<button
 					aria-label="Add GitHub Task"
 					class="flex items-center gap-2 rounded-xl bg-indigo-600 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0"
@@ -339,18 +398,8 @@
 				>
 					<span>➕</span> Add Task
 				</button>
-				<button
-					aria-label="Logout"
-					class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-					onclick={handleLogoutClick}
-					title="Logout from GitHub"
-				>
-					<span>🚪</span> Logout
-				</button>
 			</div>
-		</div>
 
-		<div class="p-4 sm:p-6 lg:p-8">
 			<!-- Filters Section -->
 			<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				<!-- Owner Selection -->

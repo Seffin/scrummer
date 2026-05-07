@@ -28,9 +28,14 @@ import { authStore } from '$lib/stores/auth.svelte';
  * @returns GitHub token or null if not found
  */
 export function getGitHubToken(): string | null {
+  // If user explicitly disconnected GitHub, don't auto-reconnect
+  if (authStore.githubDisconnected) {
+    return null;
+  }
+
   // Priority 1: Current session token (manual login on this device)
   const sessionToken = getSessionToken();
-  
+
   if (sessionToken) {
     // If we have a local session token, make sure it's synced to the server account
     if (authStore.user && authStore.user.github_token !== sessionToken) {
