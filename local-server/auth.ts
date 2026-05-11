@@ -11,6 +11,16 @@ export interface AuthUser {
   github_repo?: string;
 }
 
+export interface PublicAuthUser {
+  id: number;
+  github_id?: string;
+  username: string;
+  email?: string;
+  avatar_url?: string;
+  github_repo?: string;
+  github_connected: boolean;
+}
+
 export interface LoginRequest {
   github_id?: string;
   google_id?: string;
@@ -37,6 +47,18 @@ export class AuthService {
       AuthService.instance = new AuthService();
     }
     return AuthService.instance;
+  }
+
+  toPublicUser(user: AuthUser | User): PublicAuthUser {
+    return {
+      id: user.id,
+      github_id: user.github_id,
+      username: user.username,
+      email: user.email,
+      avatar_url: user.avatar_url,
+      github_repo: user.github_repo,
+      github_connected: !!user.github_token && user.github_token !== 'local_cli_authenticated',
+    };
   }
 
   /**

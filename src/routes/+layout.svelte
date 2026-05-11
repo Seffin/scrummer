@@ -64,37 +64,18 @@
 		}
 	});
 
-	// Auto-sync GitHub token (Server is source of truth)
+	// Keep GitHub auth state reactive to server profile changes.
 	$effect(() => {
 		const user = authStore.user;
-		const token = authStore.token;
-		
-		if (token && user) {
-			void (async () => {
-				const { getSessionToken, storeSessionToken, removeSessionToken } = await import('$lib/auth/session');
-				const sessionToken = getSessionToken();
-				
-				if (user.github_token) {
-					// Server has a token, ensure local matches
-					if (sessionToken !== user.github_token) {
-						console.log('[Layout] Syncing GitHub token DOWN from account...');
-						storeSessionToken(user.github_token);
-						githubAuthStore.refresh();
-					}
-				} else if (sessionToken) {
-					// Server is empty but local has a token, this means a logout happened elsewhere
-					console.log('[Layout] Clearing local GitHub session (synced from server logout)');
-					removeSessionToken();
-					githubAuthStore.refresh();
-				}
-			})();
+		if (user) {
+			githubAuthStore.refresh();
 		}
 	});
 
 	// Keep githubAuthStore reactive to account changes
 	$effect(() => {
-		const serverToken = authStore.user?.github_token;
-		if (serverToken !== undefined) {
+		const connected = authStore.user?.github_connected;
+		if (connected !== undefined) {
 			githubAuthStore.refresh();
 		}
 	});

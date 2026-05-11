@@ -1,40 +1,29 @@
 import { browser } from '$app/environment';
-import { getGitHubToken, removeGitHubToken, authenticateWithToken as apiAuthenticate } from '$lib/github/auth';
+import { removeGitHubToken, authenticateWithToken as apiAuthenticate } from '$lib/github/auth';
 import { authStore } from './auth.svelte';
 
 export function createGithubAuthStore() {
-	let token = $state<string | null>(null);
-	let isAuthenticated = $derived(!!token && token !== 'local_cli_authenticated');
+	let isAuthenticated = $derived(!!authStore.user?.github_connected && !authStore.githubDisconnected);
 
 	if (browser) {
-		// Initialize
-		token = getGitHubToken();
-
-		// Listen for storage changes (for multi-tab support)
-		window.addEventListener('storage', (e) => {
-			if (e.key === 'worktrack_user_session') {
-				console.log('[GithubAuthStore] Session changed in another tab');
-				token = getGitHubToken();
-			}
-		});
+		// Keep this listener for backwards compatibility with older tabs.
+		window.addEventListener('storage', () => {});
 	}
 
 	function logout() {
 		removeGitHubToken();
-		token = null;
 	}
 
 	function authenticate(newToken: string) {
 		apiAuthenticate(newToken);
-		token = newToken;
 	}
 
 	function refresh() {
-		token = getGitHubToken();
+		// State is derived from authStore.user.github_connected
 	}
 
 	return {
-		get token() { return token; },
+		get token() { return null; },
 		get isAuthenticated() { return isAuthenticated; },
 		refresh,
 		logout,

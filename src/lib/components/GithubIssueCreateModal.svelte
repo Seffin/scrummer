@@ -18,6 +18,7 @@
 	let owners = $state<string[]>([]);
 	let repos = $state<string[]>([]);
 	let loadingOwners = $state(false);
+	let loadingRepos = $state(false);
 	let errorSource = $state<'owners' | 'repos' | 'create' | null>(null);
 	let repoRequestSeq = 0;
 	let title = $state('');
@@ -31,6 +32,7 @@
 	let error = $state<string | null>(null);
 	let success = $state<string | null>(null);
 	let warning = $state<string | null>(null);
+	const isRepoSelectionReady = $derived(!!owner.trim() && !loadingRepos && repos.length > 0);
 
 	async function loadOwners() {
 		loadingOwners = true;
@@ -75,6 +77,11 @@
 			repo = '';
 			return;
 		}
+		// Disable repo selection until options load for the selected owner.
+		repos = [];
+		repo = '';
+		showReposDropdown = false;
+		loadingRepos = true;
 		try {
 			let repoList = [];
 			try {
@@ -89,6 +96,10 @@
 			if (requestId !== repoRequestSeq) return;
 			errorSource = 'repos';
 			error = e?.message ?? 'Failed to load repo options';
+		} finally {
+			if (requestId === repoRequestSeq) {
+				loadingRepos = false;
+			}
 		}
 	}
 
@@ -237,7 +248,8 @@
 								}}
 								onblur={() => setTimeout(() => (showReposDropdown = false), 200)}
 								class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-white dark:focus:bg-slate-800"
-								placeholder={owner ? 'e.g. react' : 'Select repository'}
+								placeholder={loadingRepos ? 'Loading repositories...' : (!owner ? 'Select owner first' : repos.length === 0 ? 'No repositories found' : 'e.g. react')}
+								disabled={!isRepoSelectionReady}
 							/>
 							{#if showReposDropdown && repos.length > 0}
 								{@const filteredRepos = repos.filter(r => r.toLowerCase().includes(repo.toLowerCase()))}
@@ -397,7 +409,7 @@
 						aria-label="Create"
 						type="button"
 						onclick={handleCreate}
-						disabled={submitting || !owner || !repo || !title.trim()}
+						disabled={submitting || !isRepoSelectionReady || !repo || !title.trim()}
 						class="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
 					>
 						{#if submitting}

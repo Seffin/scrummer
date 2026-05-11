@@ -1,12 +1,10 @@
 /**
- * GitHub REST API fetch utilities with automatic token injection
- * All requests automatically include the user's PAT from localStorage
+ * GitHub REST API utilities
+ * Browser calls backend proxy endpoints; GitHub token stays server-side.
  */
 
-import { getGitHubToken } from './auth';
+import { apiFetch } from '$lib/api/client';
 import { dualApi } from './dual-api';
-
-const GITHUB_API_BASE = 'https://api.github.com';
 
 export interface GitHubFetchOptions extends RequestInit {
 	/** Whether to throw on non-OK responses (default: true) */
@@ -36,27 +34,8 @@ export class GitHubNotFoundError extends Error {
 }
 
 /**
- * Builds authentication headers with user's token
- * @throws {Error} If no token is available
- */
-function buildHeaders(customHeaders?: Record<string, string>): Record<string, string> {
-	const token = getGitHubToken();
-
-	if (!token) {
-		throw new Error('No GitHub token found. Please authenticate first.');
-	}
-
-	return {
-		Authorization: `Bearer ${token}`,
-		Accept: 'application/vnd.github.v3+json',
-		'Content-Type': 'application/json',
-		...(customHeaders || {})
-	};
-}
-
-/**
  * Generic GitHub API fetch wrapper
- * Automatically injects token and handles errors
+ * Calls local authenticated proxy endpoints and handles errors
  *
  * @param endpoint API endpoint path (e.g., '/user/repos')
  * @param options Fetch options (method, body, headers, etc.)
@@ -69,49 +48,86 @@ export async function githubFetch<T>(
 	endpoint: string,
 	options: GitHubFetchOptions = {}
 ): Promise<T> {
-	const { throwOnError = true, headers: customHeaders, ...fetchOptions } = options;
+	const { throwOnError = true, headers: customHeaders, method = 'GET', body } = options;
 
 	try {
-		const url = `${GITHUB_API_BASE}${endpoint}`;
-		const response = await fetch(url, {
-			...fetchOptions,
-			headers: buildHeaders(customHeaders)
-		});
-
-		// Handle non-OK responses
-		if (!response.ok) {
-			const data = (await response.json()) as GitHubErrorResponse;
-
-			if (response.status === 401) {
-				throw new GitHubAuthError('Unauthorized: Your GitHub token is invalid or expired', 401);
-			}
-
-			if (response.status === 404) {
-				throw new GitHubNotFoundError(data.message || 'Resource not found', 404);
-			}
-
-			const errorMessage = data.message || `GitHub API Error: ${response.status} ${response.statusText}`;
-			if (throwOnError) {
-				throw new Error(errorMessage);
-			}
-
-			return data as unknown as T;
+		const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+		let proxyPath = '';
+		switch (normalizedEndpoint) {
+			case '/user':
+				proxyPath = '/github/user';
+				break;
+			case '/user/orgs?per_page=100':
+				proxyPath = '/github/orgs';
+				break;
+			case '/user/repos?per_page=100':
+				proxyPath = '/github/repos';
+				break;
+			default:
+				if (normalizedEndpoint.includes('/issues?')) {
+					const match = normalizedEndpoint.match(/^\/repos\/([^/]+)\/([^/]+)\/issues\?/);
+					if (!match) throw new Error(`Unsupported GitHub endpoint: ${normalizedEndpoint}`);
+					const owner = decodeURIComponent(match[1]);
+					const repo = decodeURIComponent(match[2]);
+					proxyPath = `/github/issues?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`;
+				} else if (normalizedEndpoint.startsWith('/users/') && normalizedEndpoint.endsWith('/repos?per_page=100')) {
+					const match = normalizedEndpoint.match(/^\/users\/([^/]+)\/repos\?per_page=100$/);
+					if (!match) throw new Error(`Unsupported GitHub endpoint: ${normalizedEndpoint}`);
+					const owner = decodeURIComponent(match[1]);
+					proxyPath = `/github/repos?owner=${encodeURIComponent(owner)}`;
+				} else if (normalizedEndpoint.startsWith('/orgs/') && normalizedEndpoint.endsWith('/repos?per_page=100')) {
+					const match = normalizedEndpoint.match(/^\/orgs\/([^/]+)\/repos\?per_page=100$/);
+					if (!match) throw new Error(`Unsupported GitHub endpoint: ${normalizedEndpoint}`);
+					const owner = decodeURIComponent(match[1]);
+					proxyPath = `/github/repos?owner=${encodeURIComponent(owner)}`;
+				} else if (normalizedEndpoint.endsWith('/issues') && method === 'POST') {
+					const match = normalizedEndpoint.match(/^\/repos\/([^/]+)\/([^/]+)\/issues$/);
+					if (!match) throw new Error(`Unsupported GitHub endpoint: ${normalizedEndpoint}`);
+					const owner = decodeURIComponent(match[1]);
+					const repo = decodeURIComponent(match[2]);
+					proxyPath = '/github/issues/create';
+					const parsedBody = typeof body === 'string' ? JSON.parse(body) : body;
+					const createPayload = {
+						...(parsedBody as Record<string, unknown>),
+						owner,
+						repo,
+					};
+					const data = await apiFetch<T>(proxyPath, {
+						method,
+						headers: customHeaders,
+						body: JSON.stringify(createPayload),
+					});
+					return data;
+				} else {
+					throw new Error(`Unsupported GitHub endpoint: ${normalizedEndpoint}`);
+				}
 		}
 
-		// Parse and return JSON for successful responses
-		return (await response.json()) as T;
+		const payload = typeof body === 'string' ? JSON.parse(body) : body;
+		const data = await apiFetch<T>(proxyPath, {
+			method,
+			headers: customHeaders,
+			...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+		});
+		return data;
 	} catch (error) {
-		// Re-throw our custom errors
+		const status = (error as { status?: number })?.status;
+		const message = error instanceof Error ? error.message : String(error);
+		if (status === 401) {
+			throw new GitHubAuthError('Unauthorized: Your GitHub connection is missing or expired', 401);
+		}
+		if (status === 404) {
+			throw new GitHubNotFoundError(message || 'Resource not found', 404);
+		}
 		if (error instanceof GitHubAuthError || error instanceof GitHubNotFoundError) {
 			throw error;
 		}
-
-		// Re-throw our thrown errors
 		if (error instanceof Error) {
+			if (!throwOnError) {
+				return { message: error.message } as unknown as T;
+			}
 			throw error;
 		}
-
-		// Wrap unknown errors with the original cause for better diagnostics
 		throw new Error(
 			`GitHub API request failed: ${String(error)}`,
 			{ cause: error }

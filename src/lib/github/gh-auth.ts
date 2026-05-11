@@ -3,12 +3,13 @@
  * Integrates with `gh auth login` for seamless authentication
  */
 
-import { getGitHubToken, storeGitHubToken, removeGitHubToken } from './auth';
+import { removeGitHubToken } from './auth';
+import { authStore } from '$lib/stores/auth.svelte';
 
 export interface GhAuthStatus {
 	isAuthenticated: boolean;
 	hasGhCli: boolean;
-	token: string | null;
+	token: null;
 	error?: string;
 }
 
@@ -78,13 +79,13 @@ export async function authenticateWithGhCli(): Promise<GhAuthStatus> {
 			};
 		}
 
-		// Store the token
-		storeGitHubToken(token);
+		// Store token server-side only
+		await authStore.syncGithubToken(token);
 		
 		return {
 			isAuthenticated: true,
 			hasGhCli: true,
-			token,
+			token: null,
 		};
 	} catch (error) {
 		return {
@@ -100,13 +101,12 @@ export async function authenticateWithGhCli(): Promise<GhAuthStatus> {
  * Check current authentication status
  */
 export async function getGhAuthStatus(): Promise<GhAuthStatus> {
-	const token = getGitHubToken();
 	const hasGhCli = await checkGhCliAvailability();
 	
 	return {
-		isAuthenticated: !!token,
+		isAuthenticated: !!authStore.user?.github_connected,
 		hasGhCli,
-		token,
+		token: null,
 	};
 }
 

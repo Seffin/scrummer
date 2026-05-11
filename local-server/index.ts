@@ -11,6 +11,25 @@ const execAsync = promisify(exec);
 
 const app = new Hono();
 
+const GITHUB_API_BASE = 'https://api.github.com';
+
+async function githubProxyFetch(path: string, githubToken: string, init: RequestInit = {}) {
+  const response = await fetch(`${GITHUB_API_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+
+  const responseText = await response.text();
+  const data = responseText ? JSON.parse(responseText) : null;
+
+  return { response, data };
+}
+
 // CORS configuration
 app.use('*', cors({
   origin: '*',
@@ -42,7 +61,7 @@ app.post('/api/auth/register', async (c) => {
   try {
     const { email, password, username } = await c.req.json();
     const { user, tokens } = await authService.register(email, password, username);
-    return c.json({ user, ...tokens });
+    return c.json({ user: authService.toPublicUser(user), ...tokens });
   } catch (error) {
     console.error('Registration error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Registration failed' }, 400);
@@ -53,7 +72,7 @@ app.post('/api/auth/login-email', async (c) => {
   try {
     const { email, password } = await c.req.json();
     const { user, tokens } = await authService.login(email, password);
-    return c.json({ user, ...tokens });
+    return c.json({ user: authService.toPublicUser(user), ...tokens });
   } catch (error) {
     console.error('Email login error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Login failed' }, 401);
@@ -64,7 +83,7 @@ app.post('/api/auth/login', async (c) => {
   try {
     const body = await c.req.json();
     const { user, tokens } = await authService.authenticateUser(body);
-    return c.json({ user, ...tokens });
+    return c.json({ user: authService.toPublicUser(user), ...tokens });
   } catch (error) {
     console.error('Auth login error:', error);
     return c.json({ error: 'Authentication failed' }, 500);
@@ -75,7 +94,7 @@ app.post('/api/auth/login-google', async (c) => {
   try {
     const body = await c.req.json();
     const { user, tokens } = await authService.authenticateGoogleUser(body);
-    return c.json({ user, ...tokens });
+    return c.json({ user: authService.toPublicUser(user), ...tokens });
   } catch (error) {
     console.error('Google login error:', error);
     return c.json({ error: 'Google authentication failed' }, 500);
@@ -85,7 +104,7 @@ app.post('/api/auth/login-google', async (c) => {
 app.get('/api/auth/me', authMiddleware, async (c) => {
   try {
     const user = c.get('user');
-    return c.json({ user });
+    return c.json({ user: authService.toPublicUser(user) });
   } catch (error) {
     console.error('Auth me error:', error);
     return c.json({ error: 'Failed to get user info' }, 500);
@@ -97,7 +116,7 @@ app.put('/api/auth/profile', authMiddleware, async (c) => {
     const user = c.get('user');
     const body = await c.req.json();
     const updatedUser = await authService.updateUserProfile(user, body);
-    return c.json({ user: updatedUser });
+    return c.json({ user: authService.toPublicUser(updatedUser) });
   } catch (error) {
     console.error('Update profile error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Update failed' }, 500);
@@ -150,6 +169,109 @@ app.post('/api/auth/github/logout', authMiddleware, async (c) => {
       error: 'Failed to disconnect GitHub',
       details: error instanceof Error ? error.message : String(error)
     }, 500);
+  }
+});
+
+app.get('/api/github/auth/status', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const connected = !!user.github_token && user.github_token !== 'local_cli_authenticated';
+  return c.json({ connected });
+});
+
+app.get('/api/github/user', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.github_token || user.github_token === 'local_cli_authenticated') {
+      return c.json({ error: 'GitHub is not connected for this account' }, 409);
+    }
+    const { response, data } = await githubProxyFetch('/user', user.github_token);
+    return c.json(data, response.status as any);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'GitHub proxy failed' }, 500);
+  }
+});
+
+app.get('/api/github/orgs', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.github_token || user.github_token === 'local_cli_authenticated') {
+      return c.json({ error: 'GitHub is not connected for this account' }, 409);
+    }
+    const { response, data } = await githubProxyFetch('/user/orgs?per_page=100', user.github_token);
+    return c.json(data, response.status as any);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'GitHub proxy failed' }, 500);
+  }
+});
+
+app.get('/api/github/repos', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.github_token || user.github_token === 'local_cli_authenticated') {
+      return c.json({ error: 'GitHub is not connected for this account' }, 409);
+    }
+    const owner = c.req.query('owner');
+    if (!owner) {
+      const { response, data } = await githubProxyFetch('/user/repos?per_page=100', user.github_token);
+      return c.json(data, response.status as any);
+    }
+
+    // Owner can be either a user or an org. Try user repos first, then fallback to org repos.
+    const userReposPath = `/users/${encodeURIComponent(owner)}/repos?per_page=100`;
+    const userReposResult = await githubProxyFetch(userReposPath, user.github_token);
+    if (userReposResult.response.ok) {
+      return c.json(userReposResult.data, userReposResult.response.status as any);
+    }
+
+    const orgReposPath = `/orgs/${encodeURIComponent(owner)}/repos?per_page=100`;
+    const orgReposResult = await githubProxyFetch(orgReposPath, user.github_token);
+    return c.json(orgReposResult.data, orgReposResult.response.status as any);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'GitHub proxy failed' }, 500);
+  }
+});
+
+app.get('/api/github/issues', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const owner = c.req.query('owner');
+    const repo = c.req.query('repo');
+    if (!owner || !repo) {
+      return c.json({ error: 'owner and repo are required' }, 400);
+    }
+    if (!user.github_token || user.github_token === 'local_cli_authenticated') {
+      return c.json({ error: 'GitHub is not connected for this account' }, 409);
+    }
+    const issuesPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?per_page=100&state=all`;
+    const { response, data } = await githubProxyFetch(issuesPath, user.github_token);
+    return c.json(data, response.status as any);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'GitHub proxy failed' }, 500);
+  }
+});
+
+app.post('/api/github/issues/create', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const owner = body.owner as string | undefined;
+    const repo = body.repo as string | undefined;
+    const title = body.title as string | undefined;
+    const issueBody = body.body as string | undefined;
+    if (!owner || !repo || !title) {
+      return c.json({ error: 'owner, repo and title are required' }, 400);
+    }
+    if (!user.github_token || user.github_token === 'local_cli_authenticated') {
+      return c.json({ error: 'GitHub is not connected for this account' }, 409);
+    }
+    const createPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`;
+    const { response, data } = await githubProxyFetch(createPath, user.github_token, {
+      method: 'POST',
+      body: JSON.stringify({ title, body: issueBody }),
+    });
+    return c.json(data, response.status as any);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'GitHub proxy failed' }, 500);
   }
 });
 

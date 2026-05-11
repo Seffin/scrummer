@@ -24,10 +24,8 @@
 	// Monitor auth store for GitHub token changes (revoked/added from other devices)
 	$effect(() => {
 		// Case 1: Token revoked from another device
-		if (authStore.user && !authStore.user.github_token && isAuthenticated) {
+		if (authStore.user && !authStore.user.github_connected && isAuthenticated) {
 			// GitHub token was revoked from another device
-			// Clear local session token to prevent auto-reconnection
-			{ removeGitHubToken(); }
 			githubAuthStore.logout();
 			githubDisconnectedNotification = true;
 			owners = [];
@@ -38,18 +36,10 @@
 		}
 
 		// Case 2: Token added on this or another device (flag was cleared)
-		if (authStore.user && authStore.user.github_token && !authStore.githubDisconnected && !isAuthenticated) {
-			// GitHub token is available and flag is cleared, re-authenticate
-			console.log('[GithubIssuesPanel] Re-authenticating with GitHub token from server');
-			import('$lib/github/auth').then(({ authenticateWithToken }) => {
-				if (authStore.user.github_token && authStore.user.github_token !== 'local_cli_authenticated') {
-					try {
-						authenticateWithToken(authStore.user.github_token);
-					} catch (e) {
-						console.error('[GithubIssuesPanel] Failed to re-authenticate:', e);
-					}
-				}
-			});
+		if (authStore.user && authStore.user.github_connected && !authStore.githubDisconnected && !isAuthenticated) {
+			// Server indicates GitHub is connected; refresh store state.
+			console.log('[GithubIssuesPanel] Refreshing GitHub auth state from server profile');
+			githubAuthStore.refresh();
 		}
 	});
 
@@ -66,6 +56,7 @@
 	let loadingRepos = $state(false);
 	let errorSource = $state<'owners' | 'repos' | 'issues' | null>(null);
 	let repoRequestSeq = 0;
+	const isRepoSelectionReady = $derived(!!owner.trim() && !loadingRepos && repos.length > 0);
 
 	const displayedIssues = $derived(issues.length > 0 ? issues : githubStore.filteredIssues);
 
@@ -225,6 +216,10 @@
 			repo = '';
 			return;
 		}
+		// Disable repo selection until fresh options are loaded for the selected owner.
+		repos = [];
+		repo = '';
+		showReposDropdown = false;
 		loadingRepos = true;
 		try {
 			let repoList = [];
@@ -458,8 +453,8 @@
 							}}
 							onblur={() => setTimeout(() => (showReposDropdown = false), 200)}
 							class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-white dark:focus:bg-slate-800"
-							placeholder={loadingRepos ? 'Loading repositories...' : (owner ? 'e.g. react' : 'Select owner first')}
-							disabled={!owner || loadingRepos}
+							placeholder={loadingRepos ? 'Loading repositories...' : (!owner ? 'Select owner first' : repos.length === 0 ? 'No repositories found' : 'e.g. react')}
+							disabled={!isRepoSelectionReady}
 						/>
 						{#if showReposDropdown && repos.length > 0}
 							{@const filteredRepos = repos.filter(r => r.toLowerCase().includes(repo.toLowerCase()))}
@@ -499,7 +494,7 @@
 					<button
 						class="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-slate-800 active:scale-[0.98] disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
 						onclick={loadIssues}
-						disabled={!owner.trim() || !repo.trim() || githubStore.loading}
+						disabled={!isRepoSelectionReady || !repo.trim() || githubStore.loading}
 					>
 						{#if githubStore.loading}
 							<span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>

@@ -4,7 +4,7 @@ export interface User {
 	id: number;
 	github_id?: string;
 	github_username?: string;
-	github_token?: string;
+	github_connected?: boolean;
 	username: string;
 	email?: string;
 	avatar_url?: string;
@@ -194,9 +194,9 @@ export function createAuthStore() {
 		// Poll for GitHub token status every 30 seconds to catch disconnections/logins from other devices
 		setInterval(() => {
 			if (token && user) {
-				const hadGitHubToken = !!user.github_token && user.github_token !== 'local_cli_authenticated';
+				const hadGitHubToken = !!user.github_connected;
 				void fetchMe().then(() => {
-					const hasGitHubToken = !!user?.github_token && user.github_token !== 'local_cli_authenticated';
+					const hasGitHubToken = !!user?.github_connected;
 
 					// Case 1: Token was revoked from another device → disconnect
 					if (hadGitHubToken && !hasGitHubToken) {
@@ -204,10 +204,6 @@ export function createAuthStore() {
 						// Set flag to prevent auto-reconnection
 						githubDisconnected = true;
 						if (browser) localStorage.setItem('github_disconnected', 'true');
-						// Clear local GitHub session token
-						import('$lib/github/auth').then(({ removeGitHubToken }) => {
-							removeGitHubToken();
-						});
 					}
 
 					// Case 2: Token was added on another device → auto-login
@@ -216,10 +212,6 @@ export function createAuthStore() {
 						// Clear disconnected flag
 						githubDisconnected = false;
 						if (browser) localStorage.setItem('github_disconnected', 'false');
-						// Clear local session token to use server token
-						import('$lib/github/auth').then(({ removeGitHubToken }) => {
-							removeGitHubToken();
-						});
 					}
 				});
 			}
@@ -254,10 +246,6 @@ export function createAuthStore() {
 				githubDisconnected = true;
 				if (browser) localStorage.setItem('github_disconnected', 'true');
 
-				// Clear local GitHub session token to prevent auto-reconnection
-				const { removeGitHubToken } = await import('$lib/github/auth');
-				removeGitHubToken();
-
 				// Refresh user data to reflect GitHub disconnection
 				await fetchMe();
 				console.log('[AuthStore] GitHub disconnected successfully');
@@ -271,9 +259,9 @@ export function createAuthStore() {
 		if (!token || !user) return;
 		
 		// If we are setting a token, check if it's already the same
-		if (githubToken && user.github_token === githubToken) return;
+		if (githubToken && user.github_connected) return;
 		// If we are clearing, check if it's already empty
-		if (!githubToken && !user.github_token) return;
+		if (!githubToken && !user.github_connected) return;
 		
 		try {
 			const { authApi } = await import('$lib/api/authApi');
