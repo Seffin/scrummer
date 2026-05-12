@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { Hono, Context, Next } from 'hono';
 import { cors } from 'hono/cors';
@@ -5,7 +6,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { authService } from './auth.js';
 import { timerService, TimerConflictError } from './timer.js';
-import { db } from './database.js';
+import { DatabaseService } from './database-turso.js';
 
 const execAsync = promisify(exec);
 
@@ -39,7 +40,7 @@ app.use('*', cors({
 
 // Authentication middleware
 const authMiddleware = async (c: Context, next: Next) => {
-  const user = authService.authenticateRequest(c);
+  const user = await authService.authenticateRequest(c);
   if (!user) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -103,7 +104,7 @@ app.post('/api/auth/login-google', async (c) => {
 
 app.get('/api/auth/me', authMiddleware, async (c) => {
   try {
-    const user = c.get('user');
+    const user = c.get('user') as import('./auth.js').AuthUser;
     return c.json({ user: authService.toPublicUser(user) });
   } catch (error) {
     console.error('Auth me error:', error);
@@ -116,7 +117,11 @@ app.put('/api/auth/profile', authMiddleware, async (c) => {
     const user = c.get('user');
     const body = await c.req.json();
     const updatedUser = await authService.updateUserProfile(user, body);
-    return c.json({ user: authService.toPublicUser(updatedUser) });
+    const publicUser = authService.toPublicUser(updatedUser);
+    if (!publicUser) {
+      return c.json({ error: 'Failed to update profile' }, 500);
+    }
+    return c.json({ user: publicUser });
   } catch (error) {
     console.error('Update profile error:', error);
     return c.json({ error: error instanceof Error ? error.message : 'Update failed' }, 500);
@@ -279,7 +284,8 @@ app.post('/api/github/issues/create', authMiddleware, async (c) => {
 app.get('/api/timer/active', authMiddleware, async (c) => {
   try {
     const user = c.get('user');
-    const activeTimer = timerService.getActiveTimer(user);
+    const activeTimer = await timerService.getActiveTimer(user);
+    console.log('[API] /api/timer/active - user:', user.id, 'activeTimer:', activeTimer);
     return c.json({ timer: activeTimer });
   } catch (error) {
     console.error('Get active timer error:', error);
@@ -371,7 +377,7 @@ app.get('/api/timer/sessions', authMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const limit = parseInt(c.req.query('limit') || '50');
-    const sessions = timerService.getTimerSessions(user, limit);
+    const sessions = await timerService.getTimerSessions(user, limit);
     return c.json({ sessions });
   } catch (error) {
     console.error('Get timer sessions error:', error);
@@ -383,7 +389,7 @@ app.get('/api/timer/:id/events', authMiddleware, async (c) => {
   try {
     const user = c.get('user');
     const sessionId = parseInt(c.req.param('id'));
-    const events = timerService.getTimerEvents(user, sessionId);
+    const events = await timerService.getTimerEvents(user, sessionId);
     return c.json({ events });
   } catch (error) {
     console.error('Get timer events error:', error);

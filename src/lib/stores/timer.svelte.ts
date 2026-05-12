@@ -24,7 +24,8 @@ function createTimerStore() {
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
 	let conflictError = $state<string | null>(null);
-	
+	let conflictingSession = $state<TimerDTO | null>(null);
+
 	// Local metadata
 	let clients = $state<string[]>([]);
 	let projects = $state<Record<string, string[]>>({}); // client -> projects[]
@@ -36,11 +37,16 @@ function createTimerStore() {
 
 	function startTick() {
 		if (_intervalId) return;
-		_intervalId = setInterval(() => { _tick++; }, 1000);
+		console.log('[TimerStore] Starting tick');
+		_intervalId = setInterval(() => {
+			_tick++;
+			console.log('[TimerStore] Tick:', _tick);
+		}, 1000);
 	}
 
 	function stopTick() {
 		if (_intervalId) {
+			console.log('[TimerStore] Stopping tick');
 			clearInterval(_intervalId);
 			_intervalId = null;
 		}
@@ -68,21 +74,27 @@ function createTimerStore() {
 
 	async function sync() {
 		if (!authStore.isAuthenticated) return;
-		
+
 		try {
 			const [activeRes, sessionsRes] = await Promise.all([
 				timerApi.getActive(),
 				timerApi.getSessions(20)
 			]);
 
+			console.log('[TimerStore] Sync - activeRes:', activeRes);
+			console.log('[TimerStore] Sync - activeRes.timer:', activeRes.timer);
+			console.log('[TimerStore] Sync - sessionsRes:', sessionsRes);
+
 			activeTimer = activeRes.timer;
+			console.log('[TimerStore] Sync - activeTimer set to:', activeTimer);
+
 			if (activeTimer && (activeTimer.status === 'active' || activeTimer.status === 'In Progress')) {
 				startTick();
 			} else {
 				stopTick();
 			}
 
-			if (sessionsRes && sessionsRes.sessions) {
+			if (sessionsRes && Array.isArray(sessionsRes.sessions)) {
 				sessions = sessionsRes.sessions.map(s => ({
 					id: s.id.toString(),
 					user: authStore.user?.username || 'User',
@@ -93,6 +105,8 @@ function createTimerStore() {
 					startTime: s.start_time,
 					durationSeconds: s.duration_seconds
 				}));
+			} else {
+				sessions = [];
 			}
 			conflictError = null;
 		} catch (e) {
@@ -104,12 +118,13 @@ function createTimerStore() {
 		isLoading = true;
 		error = null;
 		conflictError = null;
-		
+		conflictingSession = null;
+
 		// Update local metadata
 		const c = client.trim();
 		const p = project.trim();
 		const t = task.trim();
-		
+
 		if (c && !clients.includes(c)) clients = [...clients, c];
 		if (c && p) {
 			const existing = projects[c] ?? [];
@@ -123,12 +138,14 @@ function createTimerStore() {
 		try {
 			const deviceInfo = { browser: navigator.userAgent, platform: navigator.platform };
 			const res = await timerApi.start(c, p, t, deviceInfo);
+			console.log('[TimerStore] Start response:', res);
 			activeTimer = res.timer;
+			console.log('[TimerStore] Active timer set:', activeTimer);
 			startTick();
-			await sync();
 		} catch (e: any) {
 			if (e.status === 409) {
 				conflictError = e.data?.message || 'Timer conflict';
+				conflictingSession = e.data?.conflicting_timer || null;
 			} else {
 				error = e.message;
 			}
@@ -188,6 +205,8 @@ function createTimerStore() {
 				activeTimer = null;
 				stopTick();
 			}
+			conflictError = null;
+			conflictingSession = null;
 			await sync();
 		} catch (e: any) {
 			error = e.message;
@@ -259,6 +278,7 @@ function createTimerStore() {
 		get isLoading() { return isLoading; },
 		get error() { return error; },
 		get conflictError() { return conflictError; },
+		get conflictingSession() { return conflictingSession; },
 		get clients() { return clients; },
 		get projects() { return projects; },
 		get knownTasks() { return knownTasks; },
@@ -277,11 +297,22 @@ function createTimerStore() {
 
 		get elapsedSeconds() {
 			void _tick; // reactive dependency
-			if (!activeTimer) return 0;
+			if (!activeTimer) {
+				console.log('[TimerStore] elapsedSeconds: no activeTimer');
+				return 0;
+			}
+			const running = activeTimer.status === 'active' || activeTimer.status === 'In Progress';
+			console.log('[TimerStore] elapsedSeconds:', {
+				status: activeTimer.status,
+				running,
+				start_time: activeTimer.start_time,
+				duration_seconds: activeTimer.duration_seconds,
+				tick: _tick
+			});
 			return calcElapsedSeconds({
 				startTime: activeTimer.start_time,
 				elapsedSeconds: activeTimer.duration_seconds,
-				running: activeTimer.status === 'active' || activeTimer.status === 'In Progress'
+				running
 			});
 		},
 

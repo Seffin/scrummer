@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { timerStore } from '$lib/stores/timer.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import NavBar from '$lib/components/NavBar.svelte';
 
@@ -10,6 +11,13 @@
 	import GithubIssuesPanel from '$lib/components/GithubIssuesPanel.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import DashboardLayout from '$lib/components/dashboard/DashboardLayout.svelte';
+
+	onMount(() => {
+		timerStore.init();
+		if (authStore.isAuthenticated) {
+			timerStore.sync();
+		}
+	});
 
 	onDestroy(() => {
 		timerStore.destroy();

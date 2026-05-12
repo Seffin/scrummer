@@ -1,5 +1,7 @@
-import { db, TimerSession, TimerEvent } from './database.js';
+import { DatabaseService, TimerSession, TimerEvent } from './database-turso.js';
 import { AuthUser } from './auth.js';
+
+const db = new DatabaseService();
 
 export interface CreateTimerRequest {
   client: string;
@@ -28,7 +30,7 @@ export class TimerService {
    */
   async startTimer(user: AuthUser, request: CreateTimerRequest): Promise<TimerSession> {
     // Check if user already has an active timer
-    const activeTimer = db.getActiveTimerForUser(user.id);
+    const activeTimer = await db.getActiveTimerForUser(user.id);
     if (activeTimer) {
       const error = new Error('User already has an active timer') as TimerConflictError;
       error.type = 'CONFLICT';
@@ -39,7 +41,7 @@ export class TimerService {
     const now = new Date().toISOString();
 
     // Create new timer session
-    const session = db.createTimerSession({
+    const session = await db.createTimerSession({
       user_id: user.id,
       client: request.client,
       project: request.project,
@@ -51,9 +53,10 @@ export class TimerService {
     });
 
     // Log the start event
-    db.createTimerEvent({
+    await db.createTimerEvent({
       session_id: session.id,
       event_type: 'start',
+      timestamp: new Date().toISOString(),
       device_info: JSON.stringify(request.device_info),
       metadata: JSON.stringify({ action: 'start_timer' }),
     });
@@ -65,7 +68,7 @@ export class TimerService {
    * Pause an active timer
    */
   async pauseTimer(user: AuthUser, sessionId: number, deviceInfo: Record<string, any>): Promise<TimerSession> {
-    const session = db.getTimerSessionById(sessionId);
+    const session = await db.getTimerSession(sessionId);
 
     if (!session || session.user_id !== user.id) {
       throw new Error('Timer session not found or access denied');
@@ -82,7 +85,7 @@ export class TimerService {
     const totalDuration = session.duration_seconds + additionalSeconds;
 
     // Update session
-    const updatedSession = db.updateTimerSession(sessionId, {
+    const updatedSession = await db.updateTimerSession(sessionId, {
       status: 'paused',
       duration_seconds: totalDuration,
       end_time: now.toISOString(),
@@ -93,9 +96,10 @@ export class TimerService {
     }
 
     // Log the pause event
-    db.createTimerEvent({
+    await db.createTimerEvent({
       session_id: sessionId,
       event_type: 'pause',
+      timestamp: new Date().toISOString(),
       device_info: JSON.stringify(deviceInfo),
       metadata: JSON.stringify({
         action: 'pause_timer',
@@ -111,7 +115,7 @@ export class TimerService {
    * Resume a paused timer
    */
   async resumeTimer(user: AuthUser, sessionId: number, deviceInfo: Record<string, any>): Promise<TimerSession> {
-    const session = db.getTimerSessionById(sessionId);
+    const session = await db.getTimerSession(sessionId);
 
     if (!session || session.user_id !== user.id) {
       throw new Error('Timer session not found or access denied');
@@ -122,7 +126,7 @@ export class TimerService {
     }
 
     // Check if user has another active timer
-    const activeTimer = db.getActiveTimerForUser(user.id);
+    const activeTimer = await db.getActiveTimerForUser(user.id);
     if (activeTimer && activeTimer.id !== sessionId) {
       const error = new Error('User already has another active timer') as TimerConflictError;
       error.type = 'CONFLICT';
@@ -133,7 +137,7 @@ export class TimerService {
     const now = new Date().toISOString();
 
     // Update session to active with new start time
-    const updatedSession = db.updateTimerSession(sessionId, {
+    const updatedSession = await db.updateTimerSession(sessionId, {
       status: 'active',
       start_time: now, // Reset start time for new active period
       end_time: undefined,
@@ -144,9 +148,10 @@ export class TimerService {
     }
 
     // Log the resume event
-    db.createTimerEvent({
+    await db.createTimerEvent({
       session_id: sessionId,
       event_type: 'resume',
+      timestamp: new Date().toISOString(),
       device_info: JSON.stringify(deviceInfo),
       metadata: JSON.stringify({ action: 'resume_timer' }),
     });
@@ -158,7 +163,7 @@ export class TimerService {
    * Complete a timer session
    */
   async completeTimer(user: AuthUser, sessionId: number, deviceInfo: Record<string, any>): Promise<TimerSession> {
-    const session = db.getTimerSessionById(sessionId);
+    const session = await db.getTimerSession(sessionId);
 
     if (!session || session.user_id !== user.id) {
       throw new Error('Timer session not found or access denied');
@@ -179,7 +184,7 @@ export class TimerService {
     }
 
     // Update session
-    const updatedSession = db.updateTimerSession(sessionId, {
+    const updatedSession = await db.updateTimerSession(sessionId, {
       status: 'completed',
       duration_seconds: totalDuration,
       end_time: now.toISOString(),
@@ -190,9 +195,10 @@ export class TimerService {
     }
 
     // Log the complete event
-    db.createTimerEvent({
+    await db.createTimerEvent({
       session_id: sessionId,
       event_type: 'complete',
+      timestamp: new Date().toISOString(),
       device_info: JSON.stringify(deviceInfo),
       metadata: JSON.stringify({
         action: 'complete_timer',
@@ -207,16 +213,17 @@ export class TimerService {
    * Discard a timer session
    */
   async discardTimer(user: AuthUser, sessionId: number, deviceInfo: Record<string, any>): Promise<void> {
-    const session = db.getTimerSessionById(sessionId);
+    const session = await db.getTimerSession(sessionId);
 
     if (!session || session.user_id !== user.id) {
       throw new Error('Timer session not found or access denied');
     }
 
     // Log the discard event before deletion
-    db.createTimerEvent({
+    await db.createTimerEvent({
       session_id: sessionId,
       event_type: 'discard',
+      timestamp: new Date().toISOString(),
       device_info: JSON.stringify(deviceInfo),
       metadata: JSON.stringify({ action: 'discard_timer' }),
     });
@@ -228,34 +235,34 @@ export class TimerService {
   /**
    * Get active timer for user
    */
-  getActiveTimer(user: AuthUser): TimerSession | null {
-    return db.getActiveTimerForUser(user.id);
+  async getActiveTimer(user: AuthUser): Promise<TimerSession | null> {
+    return await db.getActiveTimerForUser(user.id);
   }
 
   /**
    * Get timer sessions for user
    */
-  getTimerSessions(user: AuthUser, limit = 50): TimerSession[] {
-    return db.getTimerSessionsForUser(user.id, limit);
+  async getTimerSessions(user: AuthUser, limit = 50): Promise<TimerSession[]> {
+    return await db.getTimerSessionsForUser(user.id, limit);
   }
 
   /**
    * Get timer session by ID (with ownership check)
    */
-  getTimerSession(user: AuthUser, sessionId: number): TimerSession | null {
-    const session = db.getTimerSessionById(sessionId);
+  async getTimerSession(user: AuthUser, sessionId: number): Promise<TimerSession | null> {
+    const session = await db.getTimerSession(sessionId);
     return session && session.user_id === user.id ? session : null;
   }
 
   /**
    * Get timer events for a session
    */
-  getTimerEvents(user: AuthUser, sessionId: number): TimerEvent[] {
-    const session = db.getTimerSessionById(sessionId);
+  async getTimerEvents(user: AuthUser, sessionId: number): Promise<TimerEvent[]> {
+    const session = await db.getTimerSession(sessionId);
     if (!session || session.user_id !== user.id) {
       return [];
     }
-    return db.getTimerEventsForSession(sessionId);
+    return await db.getTimerEventsForSession(sessionId);
   }
 }
 

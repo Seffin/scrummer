@@ -1,5 +1,7 @@
-import { db, User } from './database.js';
+import { DatabaseService, User } from './database-turso.js';
 import crypto from 'crypto';
+
+const db = new DatabaseService();
 
 export interface AuthUser {
   id: number;
@@ -49,7 +51,8 @@ export class AuthService {
     return AuthService.instance;
   }
 
-  toPublicUser(user: AuthUser | User): PublicAuthUser {
+  toPublicUser(user: AuthUser | User | null): PublicAuthUser | null {
+    if (!user) return null;
     return {
       id: user.id,
       github_id: user.github_id,
@@ -65,28 +68,28 @@ export class AuthService {
    * Authenticate or create user from Google data
    */
   async authenticateGoogleUser(loginData: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
-    let user = loginData.google_id ? db.getUserByGoogleId(loginData.google_id) : null;
+    let user = loginData.google_id ? await db.getUserByGoogleId(loginData.google_id) : null;
 
     // Account Merging: If no user found by Google ID, check by Email
     if (!user && loginData.email) {
-      const existingUser = db.getUserByEmail(loginData.email);
+      const existingUser = await db.getUserByEmail(loginData.email);
       if (existingUser) {
         // Merge: Link Google ID to existing email account
-        user = db.updateUser(existingUser.id, {
+        user = await db.updateUser(existingUser.id, {
           google_id: loginData.google_id,
           avatar_url: loginData.avatar_url || existingUser.avatar_url,
           username: loginData.username || existingUser.username
-        })!;
+        });
       }
     }
 
     if (!user) {
       // Create new user
-      user = db.createUser({
+      user = await db.createUser({
         google_id: loginData.google_id,
         username: loginData.username,
         email: loginData.email,
-        avatar_url: loginData.avatar_url,
+        avatar_url: loginData.avatar_url
       });
     }
 
@@ -98,24 +101,24 @@ export class AuthService {
    * Authenticate or create user from GitHub OAuth data
    */
   async authenticateUser(loginData: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
-    let user = loginData.github_id ? db.getUserByGithubId(loginData.github_id) : null;
+    let user = loginData.github_id ? await db.getUserByGithubId(loginData.github_id) : null;
 
     // Account Merging: If no user found by GitHub ID, check by Email
     if (!user && loginData.email) {
-      const existingUser = db.getUserByEmail(loginData.email);
+      const existingUser = await db.getUserByEmail(loginData.email);
       if (existingUser) {
         // Merge: Link GitHub ID to existing email account
-        user = db.updateUser(existingUser.id, {
+        user = await db.updateUser(existingUser.id, {
           github_id: loginData.github_id,
           avatar_url: loginData.avatar_url || existingUser.avatar_url,
           username: loginData.username || existingUser.username
-        })!;
+        });
       }
     }
 
     if (!user) {
       // Create new user with OAuth token
-      user = db.createUser({
+      user = await db.createUser({
         github_id: loginData.github_id,
         github_username: loginData.username,
         github_token: loginData.github_token || (loginData.github_id ? 'local_cli_authenticated' : null),
@@ -125,11 +128,14 @@ export class AuthService {
       });
     } else {
       // Update user with latest info and OAuth token
-      user = db.updateUser(user.id, {
+      const updated = await db.updateUser(user.id, {
         github_username: loginData.username || user.github_username,
         avatar_url: loginData.avatar_url || user.avatar_url,
         github_token: loginData.github_token || user.github_token
-      })!;
+      });
+      if (updated) {
+        user = updated;
+      }
     }
 
     const tokens = this.generateTokens(user);
@@ -140,12 +146,12 @@ export class AuthService {
    * Register with Email/Password
    */
   async register(email: string, password: string, username: string): Promise<{ user: User; tokens: AuthTokens }> {
-    const existingUser = db.getUserByEmail(email);
+    const existingUser = await db.getUserByEmail(email);
     if (existingUser) {
       throw new Error('User already exists with this email');
     }
 
-    const user = db.createUser({
+    const user = await db.createUser({
       email,
       username,
       password_hash: this.hashPassword(password)
@@ -159,7 +165,7 @@ export class AuthService {
    * Login with Email/Password
    */
   async login(email: string, password: string): Promise<{ user: User; tokens: AuthTokens }> {
-    const user = db.getUserByEmail(email);
+    const user = await db.getUserByEmail(email);
     if (!user || !user.password_hash) {
       throw new Error('Invalid email or password');
     }
@@ -192,7 +198,7 @@ export class AuthService {
     if (data.google_id) allowedUpdates.google_id = data.google_id;
     if (data.github_repo) allowedUpdates.github_repo = data.github_repo;
 
-    const updated = db.updateUser(user.id, allowedUpdates);
+    const updated = await db.updateUser(user.id, allowedUpdates);
 
     if (!updated) {
       throw new Error('User not found');
@@ -204,7 +210,7 @@ export class AuthService {
   /**
    * Verify token and return user
    */
-  verifyToken(token: string): AuthUser | null {
+  async verifyToken(token: string): Promise<AuthUser | null> {
     const tokenData = tokenStore.get(token);
     if (!tokenData) return null;
 
@@ -213,7 +219,12 @@ export class AuthService {
       return null;
     }
 
-    const user = db.getUserById(tokenData.userId);
+    if (!tokenData.userId) {
+      tokenStore.delete(token);
+      return null;
+    }
+
+    const user = await db.getUserById(tokenData.userId);
     if (!user) {
       tokenStore.delete(token);
       return null;
@@ -264,13 +275,13 @@ export class AuthService {
   /**
    * Middleware to authenticate requests
    */
-  authenticateRequest(c: any): AuthUser | null {
+  async authenticateRequest(c: any): Promise<AuthUser | null> {
     const authHeader = c.req.header('Authorization');
     const token = this.extractTokenFromHeader(authHeader);
 
     if (!token) return null;
 
-    return this.verifyToken(token);
+    return await this.verifyToken(token);
   }
 
   /**
@@ -324,7 +335,7 @@ export class AuthService {
     }
 
     // Clear GitHub token from database
-    db.updateUser(user.id, { github_token: null });
+    await db.updateUser(user.id, { github_token: null });
 
     // Invalidate local app token
     tokenStore.delete(token);

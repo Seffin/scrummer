@@ -29,3 +29,6 @@ test-results
 .continue/config.yaml
 .continue/
 local-server/worktrack-data.json
+*.backup
+worktrack-data.json.backup
+local.db
