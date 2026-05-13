@@ -5,7 +5,7 @@
 	import { formatDuration, formatDate } from '$lib/utils/timeUtils';
 
 	// Now Tracking: Active and paused timers
-	let activeTimers = $derived(() => {
+	let activeTimers = $derived.by(() => {
 		const list = [];
 		if (timerStore.activeTimer) {
 			list.push({ ...timerStore.activeTimer, isPaused: false, elapsed: timerStore.elapsedSeconds });
@@ -17,14 +17,14 @@
 	});
 
 	// Up Next: Open GitHub issues
-	let upNextIssues = $derived(() => {
+	let upNextIssues = $derived.by(() => {
 		return githubStore.filteredIssues
 			.filter(i => i.state === 'OPEN')
 			.slice(0, 5);
 	});
 
 	// Recent Sessions: Last 5 completed
-	let recentSessions = $derived(() => {
+	let recentSessions = $derived.by(() => {
 		return [...timerStore.sessions]
 			.filter(s => s.status === 'Completed')
 			.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
@@ -62,21 +62,21 @@
 	<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/50">
 		<div class="mb-4 flex items-center justify-between">
 			<h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Now Tracking</h3>
-			{#if activeTimers().length > 0}
-				<span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400">
-					{activeTimers().length}
+			{#if activeTimers.length > 0}
+				<span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-50/20 dark:text-indigo-400">
+					{activeTimers.length}
 				</span>
 			{/if}
 		</div>
 
-		{#if activeTimers().length === 0}
+		{#if activeTimers.length === 0}
 			<div class="py-8 text-center">
 				<p class="text-sm text-slate-400 dark:text-slate-500">No active timers</p>
 				<p class="mt-1 text-xs text-slate-400 dark:text-slate-500">Start a timer to track your work</p>
 			</div>
 		{:else}
 			<div class="space-y-3">
-				{#each activeTimers() as timer (timer.id)}
+				{#each activeTimers as timer (timer.id)}
 					<div class="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700/50 dark:bg-slate-700/30">
 						<div class="flex-1 min-0">
 							<p class="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{timer.task}</p>
@@ -111,21 +111,21 @@
 	<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/50">
 		<div class="mb-4 flex items-center justify-between">
 			<h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Up Next</h3>
-			{#if upNextIssues().length > 0}
+			{#if upNextIssues.length > 0}
 				<span class="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-500/20 dark:text-violet-400">
-					{upNextIssues().length}
+					{upNextIssues.length}
 				</span>
 			{/if}
 		</div>
 
-		{#if upNextIssues().length === 0}
+		{#if upNextIssues.length === 0}
 			<div class="py-8 text-center">
 				<p class="text-sm text-slate-400 dark:text-slate-500">No open issues</p>
 				<p class="mt-1 text-xs text-slate-400 dark:text-slate-500">Select a repo in the GitHub tab</p>
 			</div>
 		{:else}
 			<div class="space-y-2">
-				{#each upNextIssues() as issue (issue.number)}
+				{#each upNextIssues as issue (issue.number)}
 					<div class="group flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 transition-all hover:border-violet-200 hover:bg-violet-50 dark:border-slate-700/50 dark:bg-slate-700/30 dark:hover:border-violet-500/30 dark:hover:bg-violet-500/10">
 						<div class="flex-1 min-w-0">
 							<div class="flex items-center gap-2">
@@ -155,21 +155,21 @@
 	<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/50">
 		<div class="mb-4 flex items-center justify-between">
 			<h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Recent Sessions</h3>
-			{#if recentSessions().length > 0}
+			{#if recentSessions.length > 0}
 				<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
-					{recentSessions().length}
+					{recentSessions.length}
 				</span>
 			{/if}
 		</div>
 
-		{#if recentSessions().length === 0}
+		{#if recentSessions.length === 0}
 			<div class="py-8 text-center">
 				<p class="text-sm text-slate-400 dark:text-slate-500">No completed sessions</p>
 				<p class="mt-1 text-xs text-slate-400 dark:text-slate-500">Complete a timer to see it here</p>
 			</div>
 		{:else}
 			<div class="space-y-2">
-				{#each recentSessions() as session (session.id)}
+				{#each recentSessions as session (session.id)}
 					<div class="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700/50 dark:bg-slate-700/30">
 						<div class="flex-1 min-w-0">
 							<div class="flex items-center gap-2">
