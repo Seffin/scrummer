@@ -274,7 +274,7 @@ function createTimerStore() {
 		return report;
 	}
 
-	return {
+	const store = {
 		get activeTimer() { return activeTimer; },
 		get sessions() { return sessions; },
 		get isLoading() { return isLoading; },
@@ -286,34 +286,26 @@ function createTimerStore() {
 		get knownTasks() { return knownTasks; },
 		
 		get pausedTimers() {
-			return sessions.filter(s => s.status === 'paused');
+			return sessions.filter(s => s && s.status === 'paused');
 		},
 
 		get totalTodaySeconds() {
 			const today = new Date().toDateString();
 			const sessionTotal = sessions
-				.filter(s => new Date(s.startTime).toDateString() === today)
-				.reduce((acc, s) => acc + s.durationSeconds, 0);
+				.filter(s => s && s.startTime && new Date(s.startTime).toDateString() === today)
+				.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
 			return sessionTotal + this.elapsedSeconds;
 		},
 
 		get elapsedSeconds() {
 			void _tick; // reactive dependency
 			if (!activeTimer) {
-				console.log('[TimerStore] elapsedSeconds: no activeTimer');
 				return 0;
 			}
 			const running = activeTimer.status === 'active' || activeTimer.status === 'In Progress';
-			console.log('[TimerStore] elapsedSeconds:', {
-				status: activeTimer.status,
-				running,
-				start_time: activeTimer.start_time,
-				duration_seconds: activeTimer.duration_seconds,
-				tick: _tick
-			});
 			return calcElapsedSeconds({
 				startTime: activeTimer.start_time,
-				elapsedSeconds: activeTimer.duration_seconds,
+				elapsedSeconds: activeTimer.duration_seconds || 0,
 				running
 			});
 		},
@@ -336,14 +328,14 @@ function createTimerStore() {
 			void _tick; // reactive
 			const today = new Date().toDateString();
 			const sessionTotal = sessions
-				.filter(s => s.user === targetUser && new Date(s.startTime).toDateString() === today)
-				.reduce((acc, s) => acc + s.durationSeconds, 0);
+				.filter(s => s && s.user === targetUser && s.startTime && new Date(s.startTime).toDateString() === today)
+				.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
 			
 			let activeExtra = 0;
 			if (activeTimer && (authStore.user?.username === targetUser)) {
 				const timerDate = new Date(activeTimer.start_time).toDateString();
 				if (timerDate === today) {
-					activeExtra = timerStore.elapsedSeconds;
+					activeExtra = store.elapsedSeconds;
 				}
 			}
 			return sessionTotal + activeExtra;
@@ -355,15 +347,15 @@ function createTimerStore() {
 				return { 
 					id: activeTimer.id, 
 					running: activeTimer.status === 'active' || activeTimer.status === 'In Progress',
-					elapsedSeconds: timerStore.elapsedSeconds
+					elapsedSeconds: store.elapsedSeconds
 				};
 			}
-			const paused = sessions.find(s => s.client === 'GitHub' && s.project === 'Issues' && s.task.startsWith(prefix) && s.status === 'paused');
+			const paused = sessions.find(s => s && s.client === 'GitHub' && s.project === 'Issues' && s.task.startsWith(prefix) && s.status === 'paused');
 			if (paused) {
 				return { 
 					id: paused.id, 
 					running: false, 
-					elapsedSeconds: paused.durationSeconds 
+					elapsedSeconds: paused.durationSeconds || 0
 				};
 			}
 			return undefined;
@@ -378,6 +370,8 @@ function createTimerStore() {
 		formatDuration,
 		destroy: stopTick
 	};
+
+	return store;
 }
 
 export const timerStore = createTimerStore();

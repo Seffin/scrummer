@@ -1,4 +1,6 @@
 import { browser } from '$app/environment';
+import { authApi } from '$lib/api/authApi';
+import { apiFetch } from '$lib/api/client';
 
 export interface User {
 	id: number;
@@ -265,8 +267,6 @@ export function createAuthStore() {
 		if (!githubToken && !user.github_connected) return;
 		
 		try {
-			const { authApi } = await import('$lib/api/authApi');
-			// Use null or empty string to clear on server
 			const res = await authApi.updateProfile({ github_token: githubToken || '' });
 			user = res.user;
 			localStorage.setItem('auth_user', JSON.stringify(user));

@@ -8,17 +8,23 @@
  * Works identically on every device because it uses wall-clock math.
  */
 export function calcElapsedSeconds(timer: {
-	startTime: string;
+	startTime: string | null | undefined;
 	elapsedSeconds: number;
 	running: boolean;
 }): number {
-	if (!timer.running) {
-		return timer.elapsedSeconds;
+	if (!timer.running || !timer.startTime) {
+		return timer.elapsedSeconds || 0;
 	}
-	const runningSeconds = Math.floor(
-		(Date.now() - new Date(timer.startTime).getTime()) / 1000
-	);
-	return Math.max(0, timer.elapsedSeconds + runningSeconds);
+	try {
+		const start = new Date(timer.startTime).getTime();
+		if (isNaN(start)) return timer.elapsedSeconds || 0;
+		
+		const runningSeconds = Math.floor((Date.now() - start) / 1000);
+		return Math.max(0, (timer.elapsedSeconds || 0) + runningSeconds);
+	} catch (e) {
+		console.error('[TimeUtils] Error calculating elapsed seconds:', e);
+		return timer.elapsedSeconds || 0;
+	}
 }
 
 /**

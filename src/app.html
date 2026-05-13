@@ -7,6 +7,20 @@
 		<link rel="icon" href="/favicon.png" />
 		<title>WorkTrack | Professional Time Management</title>
 		%sveltekit.head%
+		<script>
+			window.onerror = function(msg, url, line, col, error) {
+				var div = document.createElement('div');
+				div.style = 'position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:9999;padding:10px;font-family:monospace;white-space:pre-wrap;';
+				div.textContent = 'FATAL ERROR: ' + msg + '\nAt: ' + url + ':' + line + ':' + col + '\nStack: ' + (error ? error.stack : 'N/A');
+				document.body.appendChild(div);
+			};
+			window.onunhandledrejection = function(event) {
+				var div = document.createElement('div');
+				div.style = 'position:fixed;bottom:0;left:0;width:100%;background:darkred;color:white;z-index:9999;padding:10px;font-family:monospace;white-space:pre-wrap;';
+				div.textContent = 'UNHANDLED REJECTION: ' + event.reason + '\nStack: ' + (event.reason ? event.reason.stack : 'N/A');
+				document.body.appendChild(div);
+			};
+		</script>
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>

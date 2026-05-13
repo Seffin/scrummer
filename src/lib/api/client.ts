@@ -1,4 +1,3 @@
-import { authStore } from '$lib/stores/auth.svelte';
 import { browser } from '$app/environment';
 
 const BASE = () => {
@@ -9,7 +8,10 @@ export async function apiFetch<T>(
 	path: string,
 	options: RequestInit = {}
 ): Promise<T> {
-	const token = authStore.token;
+	let token = null;
+	if (browser) {
+		token = localStorage.getItem('auth_token');
+	}
 	const res = await fetch(`${BASE()}${path}`, {
 		...options,
 		headers: {
@@ -21,7 +23,11 @@ export async function apiFetch<T>(
 
 	if (res.status === 401) {
 		console.warn('[API] Unauthorized, logging out...');
-		authStore.logout();
+		if (browser) {
+			localStorage.removeItem('auth_token');
+			localStorage.removeItem('auth_user');
+			window.location.href = '/login';
+		}
 		throw new Error('SESSION_EXPIRED');
 	}
 
