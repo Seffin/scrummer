@@ -22,7 +22,7 @@
 		}
 		
 		// Setup device flow status listener
-		deviceFlowService.onStatusChange = (status, tokenData) => {
+		deviceFlowService.onStatusChange = (status: string, tokenData?: any) => {
 			console.log('[Login] OAuth status:', status);
 			if (status === 'authorized' && tokenData) {
 				// Token received - exchange for user and login
@@ -96,7 +96,7 @@
 			console.log('[Login] Initiating GitHub OAuth device flow...');
 			const state = await deviceFlowService.initiateDeviceFlow();
 			deviceCode = state.userCode;
-			verificationUrl = state.verificationUri;
+			verificationUrl = state.verificationUrl;
 			deviceFlowService.startPolling();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to initiate GitHub login';
