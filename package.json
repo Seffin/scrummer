@@ -6,8 +6,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"dev:host": "vite dev --host",
-		"dev:all": "concurrently \"C:/Users/DELL/.bun/bin/bun.exe run dev:host\" \"C:/Users/DELL/.bun/bin/bun.exe run backend\"",
-		"backend": "C:/Users/DELL/.bun/bin/bun.exe local-server/index.ts",
+		"dev:all": "vite dev --host",
 		"dev:mobile": "node scripts/mobile-dev.js",
 		"build": "vite build",
 		"preview": "vite preview",

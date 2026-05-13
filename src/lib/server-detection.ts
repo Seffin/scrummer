@@ -51,8 +51,7 @@ class ServerDetection {
 
   private async performHealthCheck(): Promise<boolean> {
     try {
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      const response = await fetch(`http://${hostname}:3001/health`, {
+      const response = await fetch('/health', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -81,8 +80,7 @@ class ServerDetection {
     }
 
     const isLocalAvailable = await this.checkLocalServer();
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const localUrl = `http://${hostname}:3001`;
+    const localUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
     
     this.serverInfo = {
       isLocalAvailable,

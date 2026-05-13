@@ -11,9 +11,7 @@ export interface User {
 	github_repo?: string;
 }
 
-const API_BASE = browser 
-	? `http://${window.location.hostname}:3001/api` 
-	: 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 export function createAuthStore() {
 	let token = $state<string | null>(null);
