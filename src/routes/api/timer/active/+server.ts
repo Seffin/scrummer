@@ -7,7 +7,6 @@ export const GET: RequestHandler = async ({ locals }) => {
   try {
     const user = authService.getCurrentUser(locals as App.Locals);
     const activeTimer = await timerService.getActiveTimer(user);
-    console.log('[API] /api/timer/active - user:', user.id, 'activeTimer:', activeTimer);
     return json({ timer: activeTimer });
   } catch (error) {
     console.error('Get active timer error:', error);
