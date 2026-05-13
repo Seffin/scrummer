@@ -65,10 +65,9 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		});
 
 		if (!response.ok) {
-			const text = await response.text();
-			console.error('🔐 [OAuth Token] Token request failed:', response.status, text);
+			console.error(`🔐 [OAuth Token] Token request failed with status: ${response.status}`);
 			return json(
-				{ error: 'token_request_failed', message: `Failed to exchange token: ${response.statusText}` },
+				{ error: 'token_request_failed', message: `Failed to exchange token (Status: ${response.status})` },
 				{ status: 502 }
 			);
 		}

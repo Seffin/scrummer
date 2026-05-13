@@ -70,6 +70,37 @@
 					This repository will be loaded by default in your GitHub Tracking panel.
 				</p>
 			</div>
+			<div class="flex flex-col gap-2 mt-4">
+				<label for="github-token" class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Personal Access Token (Fallback)
+				</label>
+				<div class="flex gap-2">
+					<input
+						id="github-token"
+						type="password"
+						placeholder="ghp_xxxxxxxxxxxx"
+						class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-white/5 dark:bg-white/5 dark:text-white dark:focus:bg-slate-800"
+					/>
+					<button 
+						class="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+						onclick={async () => {
+							const input = document.getElementById('github-token') as HTMLInputElement;
+							const token = input.value.trim();
+							if (token) {
+								await authStore.syncGithubToken(token);
+								await authStore.fetchMe();
+								input.value = '';
+								alert('GitHub token saved successfully!');
+							}
+						}}
+					>
+						Save Token
+					</button>
+				</div>
+				<p class="text-[10px] text-slate-500">
+					If Device Flow authentication isn't configured, paste a GitHub Personal Access Token here.
+				</p>
+			</div>
 		</div>
 	</div>
 

@@ -54,10 +54,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 
 		if (!response.ok) {
-			const text = await response.text();
-			console.error('🔐 [OAuth Server] Device code request failed:', response.status, text);
+			console.error(`🔐 [OAuth Server] Device code request failed with status: ${response.status}`);
 			return json(
-				{ error: 'device_flow_failed', message: `Failed to initiate device flow: ${response.statusText}` },
+				{ error: 'device_flow_failed', message: `Failed to initiate device flow (Status: ${response.status})` },
 				{ status: 502 }
 			);
 		}
