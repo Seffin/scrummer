@@ -9,6 +9,9 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ user: authService.toPublicUser(user), ...tokens });
   } catch (error) {
     console.error('Registration error:', error);
-    return json({ error: error instanceof Error ? error.message : 'Registration failed' }, { status: 400 });
+    return json({ 
+      error: error instanceof Error ? error.message : 'Registration failed',
+      details: String(error)
+    }, { status: 400 });
   }
 };

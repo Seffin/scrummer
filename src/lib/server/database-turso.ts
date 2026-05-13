@@ -46,6 +46,18 @@ export class DatabaseService {
     // The @libsql/client automatically connects when the first query is executed.
   }
 
+  /**
+   * Ensure all values are SQL-compatible (convert undefined to null)
+   */
+  private sanitizeValue(val: any): any {
+    if (val === undefined) return null;
+    return val;
+  }
+
+  private sanitizeArgs(args: any[]): any[] {
+    return args.map(v => this.sanitizeValue(v));
+  }
+
   // User methods
   async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
     const now = new Date().toISOString();
@@ -55,7 +67,7 @@ export class DatabaseService {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING id, github_id, github_username, github_token, google_id, username, email, password_hash, avatar_url, github_repo, created_at, updated_at
       `,
-      args: [
+      args: this.sanitizeArgs([
         userData.github_id || null,
         userData.github_username || null,
         userData.github_token || null,
@@ -67,7 +79,7 @@ export class DatabaseService {
         userData.github_repo || null,
         now,
         now
-      ]
+      ])
     });
 
     return result.rows[0] as User;
@@ -133,7 +145,7 @@ export class DatabaseService {
 
     const result = await turso.execute({
       sql: `UPDATE users SET ${setClause}, updated_at = ? WHERE id = ? RETURNING *`,
-      args: [...values, new Date().toISOString(), id]
+      args: this.sanitizeArgs([...values, new Date().toISOString(), id])
     });
 
     return result.rows[0] as User || null;
@@ -148,7 +160,7 @@ export class DatabaseService {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
       `,
-      args: [
+      args: this.sanitizeArgs([
         sessionData.user_id,
         sessionData.client,
         sessionData.project,
@@ -160,7 +172,7 @@ export class DatabaseService {
         sessionData.device_info,
         now,
         now
-      ]
+      ])
     });
 
     return result.rows[0] as TimerSession;
@@ -221,7 +233,7 @@ export class DatabaseService {
         WHERE id = ?
         RETURNING *
       `,
-      args: [...values, now, id]
+      args: this.sanitizeArgs([...values, now, id])
     });
 
     return result.rows[0] as TimerSession || null;
@@ -235,13 +247,13 @@ export class DatabaseService {
         VALUES (?, ?, ?, ?, ?)
         RETURNING *
       `,
-      args: [
+      args: this.sanitizeArgs([
         eventData.session_id,
         eventData.event_type,
         eventData.timestamp,
         eventData.device_info,
         eventData.metadata || null
-      ]
+      ])
     });
 
     return result.rows[0] as TimerEvent;

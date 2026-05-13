@@ -9,6 +9,9 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ user: authService.toPublicUser(user), ...tokens });
   } catch (error) {
     console.error('Email login error:', error);
-    return json({ error: error instanceof Error ? error.message : 'Login failed' }, { status: 401 });
+    return json({ 
+      error: error instanceof Error ? error.message : 'Login failed',
+      details: String(error)
+    }, { status: 401 });
   }
 };
