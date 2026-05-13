@@ -47,15 +47,24 @@ export class DatabaseService {
   }
 
   /**
-   * Ensure all values are SQL-compatible (convert undefined to null)
+   * Ensure all values are SQL-compatible (convert undefined to null, objects to strings)
    */
   private sanitizeValue(val: any): any {
-    if (val === undefined) return null;
+    if (val === undefined || val === null) return null;
+    if (typeof val === 'object') {
+      try {
+        return JSON.stringify(val);
+      } catch (e) {
+        return String(val);
+      }
+    }
     return val;
   }
 
   private sanitizeArgs(args: any[]): any[] {
-    return args.map(v => this.sanitizeValue(v));
+    const sanitized = args.map(v => this.sanitizeValue(v));
+    console.log('[DatabaseService] Sanitized Args:', JSON.stringify(sanitized));
+    return sanitized;
   }
 
   // User methods
@@ -91,7 +100,7 @@ export class DatabaseService {
   async getUserByUsername(username: string): Promise<User | null> {
     const result = await turso.execute({
       sql: 'SELECT * FROM users WHERE username = ? ORDER BY created_at DESC LIMIT 1',
-      args: [username]
+      args: this.sanitizeArgs([username])
     });
     return result.rows[0] as User || null;
   }
@@ -102,7 +111,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: 'SELECT * FROM users WHERE id = ?',
-      args: [id]
+      args: this.sanitizeArgs([id])
     });
 
     return result.rows[0] as User || null;
@@ -114,7 +123,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: 'SELECT * FROM users WHERE github_id = ?',
-      args: [githubId]
+      args: this.sanitizeArgs([githubId])
     });
 
     return result.rows[0] as User || null;
@@ -126,7 +135,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: 'SELECT * FROM users WHERE google_id = ?',
-      args: [googleId]
+      args: this.sanitizeArgs([googleId])
     });
 
     return result.rows[0] as User || null;
@@ -138,7 +147,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: 'SELECT * FROM users WHERE email = ?',
-      args: [email]
+      args: this.sanitizeArgs([email])
     });
 
     return result.rows[0] as User || null;
@@ -200,7 +209,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: 'SELECT * FROM timer_sessions WHERE id = ?',
-      args: [id]
+      args: this.sanitizeArgs([id])
     });
 
     return result.rows[0] as TimerSession || null;
@@ -212,7 +221,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: "SELECT * FROM timer_sessions WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
-      args: [userId]
+      args: this.sanitizeArgs([userId])
     });
 
     return result.rows[0] as TimerSession || null;
@@ -224,7 +233,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: 'SELECT * FROM timer_sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
-      args: [userId, limit]
+      args: this.sanitizeArgs([userId, limit])
     });
 
     return result.rows as TimerSession[];
@@ -275,7 +284,7 @@ export class DatabaseService {
     const lastId = Number(result.lastInsertRowid);
     const result2 = await turso.execute({
       sql: 'SELECT * FROM timer_events WHERE id = ?',
-      args: [lastId]
+      args: this.sanitizeArgs([lastId])
     });
     return result2.rows[0] as TimerEvent;
   }
@@ -286,7 +295,7 @@ export class DatabaseService {
     }
     const result = await turso.execute({
       sql: 'SELECT * FROM timer_events WHERE session_id = ? ORDER BY timestamp ASC',
-      args: [sessionId]
+      args: this.sanitizeArgs([sessionId])
     });
 
     return result.rows as TimerEvent[];
