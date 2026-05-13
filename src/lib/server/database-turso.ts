@@ -41,18 +41,9 @@ export interface TimerEvent {
 
 export class DatabaseService {
   constructor() {
-    // Initialize database on first use
-    this.initialize();
-  }
-
-  private async initialize() {
-    try {
-      // Test connection
-      await turso.execute('SELECT 1');
-      console.log('[DatabaseService] Connected to Turso database');
-    } catch (error) {
-      console.error('[DatabaseService] Failed to connect to database:', error);
-    }
+    // In serverless environments, we avoid pinging the database on initialization
+    // to prevent cold-start delays and build-time timeout errors.
+    // The @libsql/client automatically connects when the first query is executed.
   }
 
   // User methods
