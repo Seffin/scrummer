@@ -1,5 +1,5 @@
-import { DatabaseService, TimerSession, TimerEvent } from './database-turso.js';
-import { AuthUser } from './auth.js';
+import { DatabaseService, type TimerSession, type TimerEvent } from './database-turso.js';
+import type { AuthUser } from './auth.js';
 
 const db = new DatabaseService();
 

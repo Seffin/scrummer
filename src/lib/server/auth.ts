@@ -1,4 +1,4 @@
-import { DatabaseService, User } from './database-turso.js';
+import { DatabaseService, type User } from './database-turso.js';
 import crypto from 'crypto';
 
 const db = new DatabaseService();
