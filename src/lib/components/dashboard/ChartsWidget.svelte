@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { timerStore } from '$lib/stores/timer.svelte';
 	import { SvelteDate } from 'svelte/reactivity';
-	import { Doughnut, Bar } from 'svelte-chartjs';
 	import {
 		Chart as ChartJS,
 		ArcElement,
 		CategoryScale,
 		LinearScale,
 		BarElement,
+		BarController,
+		DoughnutController,
 		Title,
 		Tooltip,
 		Legend,
@@ -15,7 +16,7 @@
 		type ChartOptions
 	} from 'chart.js';
 
-	ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, Filler);
+	ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, BarController, DoughnutController, Title, Tooltip, Legend, Filler);
 
 	interface Props {
 		timeframe: 'day' | 'week' | 'month' | 'year';
@@ -188,15 +189,29 @@
 			}
 		}
 	}
+
+	function chartAction(node: HTMLCanvasElement, config: any) {
+		let chartInstance = new ChartJS(node, config);
+		return {
+			update(newConfig: any) {
+				chartInstance.data = newConfig.data;
+				chartInstance.options = newConfig.options;
+				chartInstance.update();
+			},
+			destroy() {
+				chartInstance.destroy();
+			}
+		};
+	}
 </script>
 
 <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 	<!-- Time Allocation (Doughnut) -->
 	<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/50">
 		<h3 class="mb-4 text-sm font-semibold text-slate-800 dark:text-slate-100">Time Allocation</h3>
-		<div class="h-48">
+		<div class="h-48 relative">
 			{#if timeAllocationData().labels.length > 0}
-				<Doughnut data={timeAllocationData()} options={doughnutOptions} />
+				<canvas use:chartAction={{ type: 'doughnut', data: timeAllocationData(), options: doughnutOptions }}></canvas>
 			{:else}
 				<div class="flex h-full items-center justify-center text-slate-400 dark:text-slate-500">
 					<p class="text-sm">No data for this period</p>
@@ -208,9 +223,9 @@
 	<!-- Activity Velocity (Bar) -->
 	<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/50">
 		<h3 class="mb-4 text-sm font-semibold text-slate-800 dark:text-slate-100">Activity Velocity</h3>
-		<div class="h-48">
+		<div class="h-48 relative">
 			{#if activityVelocityData().labels.length > 0}
-				<Bar data={activityVelocityData()} options={chartOptions} />
+				<canvas use:chartAction={{ type: 'bar', data: activityVelocityData(), options: chartOptions }}></canvas>
 			{:else}
 				<div class="flex h-full items-center justify-center text-slate-400 dark:text-slate-500">
 					<p class="text-sm">No data for this period</p>
@@ -222,9 +237,9 @@
 	<!-- Status Distribution (Bar) -->
 	<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/50">
 		<h3 class="mb-4 text-sm font-semibold text-slate-800 dark:text-slate-100">Status Distribution</h3>
-		<div class="h-48">
+		<div class="h-48 relative">
 			{#if statusDistribution().datasets[0].data.some(v => v > 0)}
-				<Bar data={statusDistribution()} options={chartOptions} />
+				<canvas use:chartAction={{ type: 'bar', data: statusDistribution(), options: chartOptions }}></canvas>
 			{:else}
 				<div class="flex h-full items-center justify-center text-slate-400 dark:text-slate-500">
 					<p class="text-sm">No sessions recorded</p>
