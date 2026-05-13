@@ -4,6 +4,10 @@ import { createClient } from '@libsql/client/node';
 const databaseUrl = process.env.TURSO_DATABASE_URL || process.env.VITE_TURSO_DATABASE_URL || 'file:local.db';
 const authToken = process.env.TURSO_AUTH_TOKEN || process.env.VITE_TURSO_AUTH_TOKEN;
 
+if (process.env.VERCEL && databaseUrl === 'file:local.db') {
+  throw new Error('FATAL: TURSO_DATABASE_URL must be set in Vercel. Using local.db in serverless will cause data loss.');
+}
+
 export const turso = createClient({
   url: databaseUrl,
   authToken: authToken
