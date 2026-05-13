@@ -2,10 +2,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { browser } from '$app/environment';
 
 const BASE = () => {
-	if (browser) {
-		return `http://${window.location.hostname}:3001/api`;
-	}
-	return 'http://localhost:3001/api';
+	return '/api';
 };
 
 export async function apiFetch<T>(

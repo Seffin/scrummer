@@ -275,9 +275,9 @@ export class AuthService {
   /**
    * Middleware to authenticate requests
    */
-  async authenticateRequest(c: any): Promise<AuthUser | null> {
-    const authHeader = c.req.header('Authorization');
-    const token = this.extractTokenFromHeader(authHeader);
+  async authenticateRequest(req: Request): Promise<AuthUser | null> {
+    const authHeader = req.headers.get('Authorization');
+    const token = this.extractTokenFromHeader(authHeader || undefined);
 
     if (!token) return null;
 
@@ -285,10 +285,10 @@ export class AuthService {
   }
 
   /**
-   * Get current user from request context
+   * Get current user from request locals
    */
-  getCurrentUser(c: any): AuthUser {
-    const user = c.get('user');
+  getCurrentUser(locals: App.Locals): AuthUser {
+    const user = locals.user;
     if (!user) {
       throw new Error('User not authenticated');
     }
