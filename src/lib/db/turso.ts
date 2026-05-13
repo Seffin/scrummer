@@ -68,10 +68,28 @@ const schemaStatements = [
 // Initialize database schema
 export async function initializeDatabase() {
   try {
+    // 1. Run core schema creation
     for (const statement of schemaStatements) {
       await turso.execute(statement);
     }
-    console.log('[Turso] Database initialized successfully');
+
+    // 2. Run migrations for older schemas (idempotent via try-catch)
+    const migrations = [
+      "ALTER TABLE users ADD COLUMN google_id TEXT",
+      "ALTER TABLE users ADD COLUMN password_hash TEXT",
+      "ALTER TABLE users ADD COLUMN avatar_url TEXT",
+      "ALTER TABLE users ADD COLUMN github_repo TEXT"
+    ];
+
+    for (const migration of migrations) {
+      try {
+        await turso.execute(migration);
+      } catch (e) {
+        // Ignore "duplicate column name" errors
+      }
+    }
+
+    console.log('[Turso] Database initialized and migrated successfully');
   } catch (error) {
     console.error('[Turso] Failed to initialize database:', error);
     throw error;

@@ -9,6 +9,9 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ user: authService.toPublicUser(user), ...tokens });
   } catch (error) {
     console.error('Google login error:', error);
-    return json({ error: 'Google authentication failed' }, { status: 500 });
+    return json({ 
+      error: error instanceof Error ? error.message : 'Google authentication failed',
+      details: String(error)
+    }, { status: 400 });
   }
 };
