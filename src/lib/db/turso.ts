@@ -1,4 +1,4 @@
-import { createClient } from '@libsql/client/node';
+import { createClient } from '@libsql/client';
 import { env } from '$env/dynamic/private';
 
 // Database client for Turso or local SQLite

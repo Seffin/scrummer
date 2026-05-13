@@ -1,14 +1,32 @@
 import { json, type Handle } from '@sveltejs/kit';
 import { authService } from '$lib/server/auth';
 import { initializeDatabase } from '$lib/db/turso';
+import { env } from '$env/dynamic/private';
 
-// Auto-initialize database on startup (idempotent)
-initializeDatabase().catch(err => {
-  console.error('CRITICAL: Failed to initialize database schema:', err);
-});
+// Track initialization state
+let dbInitialized = false;
+
+async function ensureDb() {
+  if (dbInitialized) return;
+  
+  if (!env.TURSO_DATABASE_URL && process.env.VERCEL) {
+    console.error('❌ FATAL: TURSO_DATABASE_URL is not set in Vercel environment variables!');
+    return;
+  }
+  
+  try {
+    await initializeDatabase();
+    dbInitialized = true;
+  } catch (err) {
+    console.error('❌ CRITICAL: Failed to initialize database schema:', err);
+  }
+}
 
 export const handle: Handle = async ({ event, resolve }) => {
   if (event.url.pathname.startsWith('/api/')) {
+    // Ensure DB is initialized before handling any API requests
+    await ensureDb();
+
     // Unprotected paths
     const publicPaths = [
       '/api/auth/login',
