@@ -319,9 +319,6 @@ export class AuthService {
 
     // Clear GitHub token from database
     await db.updateUser(user.id, { github_token: null });
-
-    // Invalidate local app token
-    tokenStore.delete(token);
   }
 }
 

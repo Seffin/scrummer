@@ -1,5 +1,11 @@
 import { json, type Handle } from '@sveltejs/kit';
 import { authService } from '$lib/server/auth';
+import { initializeDatabase } from '$lib/db/turso';
+
+// Auto-initialize database on startup (idempotent)
+initializeDatabase().catch(err => {
+  console.error('CRITICAL: Failed to initialize database schema:', err);
+});
 
 export const handle: Handle = async ({ event, resolve }) => {
   if (event.url.pathname.startsWith('/api/')) {
