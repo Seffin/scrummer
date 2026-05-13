@@ -7,25 +7,33 @@ import { env } from '$env/dynamic/private';
 let dbInitialized = false;
 
 async function ensureDb() {
-  if (dbInitialized) return;
+  if (dbInitialized) return true;
   
   if (!env.TURSO_DATABASE_URL && process.env.VERCEL) {
     console.error('❌ FATAL: TURSO_DATABASE_URL is not set in Vercel environment variables!');
-    return;
+    return false;
   }
   
   try {
     await initializeDatabase();
     dbInitialized = true;
+    return true;
   } catch (err) {
     console.error('❌ CRITICAL: Failed to initialize database schema:', err);
+    return false;
   }
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
   if (event.url.pathname.startsWith('/api/')) {
     // Ensure DB is initialized before handling any API requests
-    await ensureDb();
+    const ok = await ensureDb();
+    if (!ok) {
+      return json({ 
+        error: 'Database connection failed', 
+        details: 'Server was unable to connect to the database. Check Vercel logs for details.' 
+      }, { status: 503 });
+    }
 
     // Unprotected paths
     const publicPaths = [
@@ -51,22 +59,5 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  // Handle CORS
-  if (event.request.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
-    });
-  }
-
-  const response = await resolve(event);
-  
-  if (event.url.pathname.startsWith('/api/')) {
-    response.headers.set('Access-Control-Allow-Origin', '*');
-  }
-
-  return response;
+  return await resolve(event);
 };
