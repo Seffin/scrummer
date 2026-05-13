@@ -21,20 +21,23 @@ export function createAuthStore() {
 	let error = $state<string | null>(null);
 
 	// Initialize from localStorage
-	token = localStorage.getItem('auth_token');
-	const storedUser = localStorage.getItem('auth_user');
-	if (storedUser) {
-		try {
-			user = JSON.parse(storedUser);
-		} catch (e) {
-			localStorage.removeItem('auth_user');
+	// Initialize from localStorage
+	if (browser) {
+		token = localStorage.getItem('auth_token');
+		const storedUser = localStorage.getItem('auth_user');
+		if (storedUser) {
+			try {
+				user = JSON.parse(storedUser);
+			} catch (e) {
+				localStorage.removeItem('auth_user');
+			}
 		}
-	}
 
-	// Load githubDisconnected flag from localStorage
-	const storedDisconnected = localStorage.getItem('github_disconnected');
-	if (storedDisconnected === 'true') {
-		githubDisconnected = true;
+		// Load githubDisconnected flag from localStorage
+		const storedDisconnected = localStorage.getItem('github_disconnected');
+		if (storedDisconnected === 'true') {
+			githubDisconnected = true;
+		}
 	}
 
 	function setToken(newToken: string | null, newUser: User | null = null) {

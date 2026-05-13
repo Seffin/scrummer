@@ -123,7 +123,64 @@
 			}]
 		};
 	});
-...
+
+	function isInTimeframe(date: SvelteDate, tf: string, now: SvelteDate): boolean {
+		switch (tf) {
+			case 'day': return date.toDateString() === now.toDateString();
+			case 'week': {
+				const weekAgo = new SvelteDate(now);
+				weekAgo.setDate(weekAgo.getDate() - 7);
+				return date >= weekAgo;
+			}
+			case 'month': {
+				const monthAgo = new SvelteDate(now);
+				monthAgo.setMonth(monthAgo.getMonth() - 1);
+				return date >= monthAgo;
+			}
+			case 'year': {
+				const yearAgo = new SvelteDate(now);
+				yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+				return date >= yearAgo;
+			}
+			default: return true;
+		}
+	}
+
+	const chartOptions: ChartOptions = {
+		responsive: true,
+		maintainAspectRatio: false,
+		plugins: { legend: { display: false } },
+		scales: {
+			y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+			x: { grid: { display: false } }
+		}
+	};
+
+	const doughnutOptions: ChartOptions = {
+		responsive: true,
+		maintainAspectRatio: false,
+		plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 20, color: '#94a3b8' } } }
+	};
+
+	function chartAction(node: HTMLCanvasElement, config: any) {
+		let chartInstance = new ChartJS(node, config);
+		return {
+			update(newConfig: any) {
+				if (chartInstance) {
+					chartInstance.data = newConfig.data;
+					chartInstance.options = newConfig.options;
+					chartInstance.update('none');
+				}
+			},
+			destroy() {
+				if (chartInstance) {
+					chartInstance.destroy();
+				}
+			}
+		};
+	}
+</script>
+
 <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 	<!-- Time Allocation (Doughnut) -->
 	<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800/50">

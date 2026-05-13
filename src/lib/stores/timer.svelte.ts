@@ -53,6 +53,7 @@ function createTimerStore() {
 	}
 
 	function loadMetadata() {
+		if (typeof localStorage === 'undefined') return;
 		try {
 			const raw = localStorage.getItem(STORAGE_KEY);
 			if (raw) {
@@ -68,6 +69,7 @@ function createTimerStore() {
 	}
 
 	function saveMetadata() {
+		if (typeof localStorage === 'undefined') return;
 		const data = { clients, projects, knownTasks, shiftGoals };
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 	}

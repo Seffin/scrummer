@@ -10,10 +10,10 @@
 	let { children } = $props();
 	let initializing = $state(true);
 
-	// Load local metadata
-	timerStore.init();
-
 	onMount(() => {
+		// Load local metadata
+		timerStore.init();
+
 		let pollInterval: any;
 
 		async function init() {

@@ -11,7 +11,7 @@
 	let { timeframe }: Props = $props();
 
 	// Time Tracked: Total duration based on timeframe
-	let timeTracked = $derived(() => {
+	let timeTracked = $derived.by(() => {
 		const now = new SvelteDate();
 		const sessions = timerStore.sessions;
 		let totalSeconds = 0;
@@ -36,23 +36,23 @@
 	});
 
 	// Shift Goal Progress
-	let shiftGoalSeconds = $derived(() => {
+	let shiftGoalSeconds = $derived.by(() => {
 		return timerStore.getShiftGoal(authStore.user?.username || 'User') * 3600;
 	});
 
-	let shiftProgress = $derived(() => {
-		const goal = shiftGoalSeconds();
+	let shiftProgress = $derived.by(() => {
+		const goal = shiftGoalSeconds;
 		if (goal === 0) return 0;
-		return Math.min((timeTracked() / goal) * 100, 100);
+		return Math.min((timeTracked / goal) * 100, 100);
 	});
 
 	// Active Timers Count
-	let activeTimersCount = $derived(() => {
+	let activeTimersCount = $derived.by(() => {
 		return timerStore.activeTimer ? 1 : 0;
 	});
 
 	// Pending GitHub Issues Count
-	let pendingIssuesCount = $derived(() => {
+	let pendingIssuesCount = $derived.by(() => {
 		// Count open issues from the GitHub store
 		return githubStore.filteredIssues.filter(i => i.state === 'OPEN').length;
 	});
@@ -98,7 +98,7 @@
 			</div>
 			<div>
 				<p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Time Tracked</p>
-				<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{formatDuration(timeTracked())}</p>
+				<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{formatDuration(timeTracked)}</p>
 			</div>
 		</div>
 	</div>
@@ -112,7 +112,7 @@
 			<div class="flex-1">
 				<p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Shift Goal</p>
 				<div class="flex items-center gap-2">
-					<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{Math.round(shiftProgress())}%</p>
+					<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{Math.round(shiftProgress)}%</p>
 				</div>
 			</div>
 		</div>
@@ -120,11 +120,11 @@
 			<div class="h-2 rounded-full bg-slate-100 dark:bg-slate-700">
 				<div
 					class="h-2 rounded-full bg-emerald-500 transition-all duration-500"
-					style="width: {shiftProgress()}%"
+					style="width: {shiftProgress}%"
 				></div>
 			</div>
 			<p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-				{formatDuration(timeTracked())} / {formatDuration(shiftGoalSeconds())}
+				{formatDuration(timeTracked)} / {formatDuration(shiftGoalSeconds)}
 			</p>
 		</div>
 	</div>
@@ -137,7 +137,7 @@
 			</div>
 			<div>
 				<p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Active Timers</p>
-				<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{activeTimersCount()}</p>
+				<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{activeTimersCount}</p>
 			</div>
 		</div>
 	</div>
@@ -150,7 +150,7 @@
 			</div>
 			<div>
 				<p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending Issues</p>
-				<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{pendingIssuesCount()}</p>
+				<p class="text-2xl font-bold text-slate-800 dark:text-slate-100">{pendingIssuesCount}</p>
 			</div>
 		</div>
 	</div>
