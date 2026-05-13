@@ -61,11 +61,11 @@ export class DatabaseService {
   // User methods
   async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
     const now = new Date().toISOString();
-    const result = await turso.execute({
+    console.log('[DatabaseService] Creating user:', userData.username);
+    await turso.execute({
       sql: `
         INSERT INTO users (github_id, github_username, github_token, google_id, username, email, password_hash, avatar_url, github_repo, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        RETURNING id, github_id, github_username, github_token, google_id, username, email, password_hash, avatar_url, github_repo, created_at, updated_at
       `,
       args: this.sanitizeArgs([
         userData.github_id || null,
@@ -82,7 +82,18 @@ export class DatabaseService {
       ])
     });
 
-    return result.rows[0] as User;
+    // Fetch the created user
+    const user = await this.getUserByUsername(userData.username);
+    if (!user) throw new Error('Failed to retrieve created user');
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | null> {
+    const result = await turso.execute({
+      sql: 'SELECT * FROM users WHERE username = ? ORDER BY created_at DESC LIMIT 1',
+      args: [username]
+    });
+    return result.rows[0] as User || null;
   }
 
   async getUserById(id: number | undefined | null): Promise<User | null> {
@@ -143,22 +154,23 @@ export class DatabaseService {
     const setClause = fields.map(key => `${key} = ?`).join(', ');
     const values = fields.map(key => updates[key as keyof typeof updates]);
 
-    const result = await turso.execute({
-      sql: `UPDATE users SET ${setClause}, updated_at = ? WHERE id = ? RETURNING *`,
+    console.log('[DatabaseService] Updating user:', id);
+    await turso.execute({
+      sql: `UPDATE users SET ${setClause}, updated_at = ? WHERE id = ?`,
       args: this.sanitizeArgs([...values, new Date().toISOString(), id])
     });
 
-    return result.rows[0] as User || null;
+    return await this.getUserById(id);
   }
 
   // Timer session methods
   async createTimerSession(sessionData: Omit<TimerSession, 'id' | 'created_at' | 'updated_at'>): Promise<TimerSession> {
     const now = new Date().toISOString();
+    console.log('[DatabaseService] Creating timer session for user:', sessionData.user_id);
     const result = await turso.execute({
       sql: `
         INSERT INTO timer_sessions (user_id, client, project, task, status, start_time, end_time, duration_seconds, device_info, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        RETURNING *
       `,
       args: this.sanitizeArgs([
         sessionData.user_id,
@@ -175,7 +187,11 @@ export class DatabaseService {
       ])
     });
 
-    return result.rows[0] as TimerSession;
+    // In SQLite, last_insert_rowid() is the way to get the ID if RETURNING is not used
+    const lastId = Number(result.lastInsertRowid);
+    const session = await this.getTimerSession(lastId);
+    if (!session) throw new Error('Failed to retrieve created timer session');
+    return session;
   }
 
   async getTimerSession(id: number): Promise<TimerSession | null> {
@@ -226,26 +242,26 @@ export class DatabaseService {
     const setClause = fields.map(field => `${field} = ?`).join(', ');
     const now = new Date().toISOString();
 
-    const result = await turso.execute({
+    console.log('[DatabaseService] Updating timer session:', id);
+    await turso.execute({
       sql: `
         UPDATE timer_sessions 
         SET ${setClause}, updated_at = ?
         WHERE id = ?
-        RETURNING *
       `,
       args: this.sanitizeArgs([...values, now, id])
     });
 
-    return result.rows[0] as TimerSession || null;
+    return await this.getTimerSession(id);
   }
 
   // Timer event methods
   async createTimerEvent(eventData: Omit<TimerEvent, 'id'>): Promise<TimerEvent> {
+    console.log('[DatabaseService] Creating timer event for session:', eventData.session_id);
     const result = await turso.execute({
       sql: `
         INSERT INTO timer_events (session_id, event_type, timestamp, device_info, metadata)
         VALUES (?, ?, ?, ?, ?)
-        RETURNING *
       `,
       args: this.sanitizeArgs([
         eventData.session_id,
@@ -256,7 +272,12 @@ export class DatabaseService {
       ])
     });
 
-    return result.rows[0] as TimerEvent;
+    const lastId = Number(result.lastInsertRowid);
+    const result2 = await turso.execute({
+      sql: 'SELECT * FROM timer_events WHERE id = ?',
+      args: [lastId]
+    });
+    return result2.rows[0] as TimerEvent;
   }
 
   async getTimerEventsForSession(sessionId: number): Promise<TimerEvent[]> {
