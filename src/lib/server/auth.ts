@@ -32,14 +32,18 @@ export interface LoginRequest {
   github_token?: string; // OAuth access token for API calls
 }
 
+import jwt from 'jsonwebtoken';
+import { env } from '$env/dynamic/private';
+
+// In serverless, we must use a real JWT, not an in-memory Map
+// The secret comes from env, fallback for local testing
+const JWT_SECRET = env.JWT_SECRET || 'your-jwt-secret-key';
+
 export interface AuthTokens {
   access_token: string;
   token_type: string;
   expires_in: number;
 }
-
-// Simple in-memory token store (in production, use Redis or similar)
-const tokenStore = new Map<string, { userId: number; expires: Date }>();
 
 export class AuthService {
   private static instance: AuthService;
@@ -74,7 +78,6 @@ export class AuthService {
     if (!user && loginData.email) {
       const existingUser = await db.getUserByEmail(loginData.email);
       if (existingUser) {
-        // Merge: Link Google ID to existing email account
         user = await db.updateUser(existingUser.id, {
           google_id: loginData.google_id,
           avatar_url: loginData.avatar_url || existingUser.avatar_url,
@@ -84,7 +87,6 @@ export class AuthService {
     }
 
     if (!user) {
-      // Create new user
       user = await db.createUser({
         google_id: loginData.google_id,
         username: loginData.username,
@@ -103,11 +105,9 @@ export class AuthService {
   async authenticateUser(loginData: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
     let user = loginData.github_id ? await db.getUserByGithubId(loginData.github_id) : null;
 
-    // Account Merging: If no user found by GitHub ID, check by Email
     if (!user && loginData.email) {
       const existingUser = await db.getUserByEmail(loginData.email);
       if (existingUser) {
-        // Merge: Link GitHub ID to existing email account
         user = await db.updateUser(existingUser.id, {
           github_id: loginData.github_id,
           avatar_url: loginData.avatar_url || existingUser.avatar_url,
@@ -117,7 +117,6 @@ export class AuthService {
     }
 
     if (!user) {
-      // Create new user with OAuth token
       user = await db.createUser({
         github_id: loginData.github_id,
         github_username: loginData.username,
@@ -127,7 +126,6 @@ export class AuthService {
         avatar_url: loginData.avatar_url,
       });
     } else {
-      // Update user with latest info and OAuth token
       const updated = await db.updateUser(user.id, {
         github_username: loginData.username || user.github_username,
         avatar_url: loginData.avatar_url || user.avatar_url,
@@ -187,12 +185,11 @@ export class AuthService {
    * Update user profile data
    */
   async updateUserProfile(user: AuthUser, data: Partial<User>): Promise<User> {
-    // Whitelist allowed fields to prevent accidental overwrites of sensitive data like password_hash
     const allowedUpdates: Partial<User> = {};
     if (data.username) allowedUpdates.username = data.username;
     if (data.email) allowedUpdates.email = data.email;
     if (data.avatar_url) allowedUpdates.avatar_url = data.avatar_url;
-    if (data.github_token) allowedUpdates.github_token = data.github_token;
+    if (data.github_token !== undefined) allowedUpdates.github_token = data.github_token;
     if (data.github_id) allowedUpdates.github_id = data.github_id;
     if (data.github_username) allowedUpdates.github_username = data.github_username;
     if (data.google_id) allowedUpdates.google_id = data.google_id;
@@ -211,49 +208,34 @@ export class AuthService {
    * Verify token and return user
    */
   async verifyToken(token: string): Promise<AuthUser | null> {
-    const tokenData = tokenStore.get(token);
-    if (!tokenData) return null;
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
+      if (!decoded || !decoded.userId) return null;
 
-    if (new Date() > tokenData.expires) {
-      tokenStore.delete(token);
+      const user = await db.getUserById(decoded.userId);
+      if (!user) {
+        return null;
+      }
+
+      return {
+        id: user.id,
+        github_id: user.github_id,
+        github_token: user.github_token,
+        username: user.username,
+        email: user.email,
+        avatar_url: user.avatar_url,
+        github_repo: user.github_repo,
+      };
+    } catch (e) {
       return null;
     }
-
-    if (!tokenData.userId) {
-      tokenStore.delete(token);
-      return null;
-    }
-
-    const user = await db.getUserById(tokenData.userId);
-    if (!user) {
-      tokenStore.delete(token);
-      return null;
-    }
-
-    return {
-      id: user.id,
-      github_id: user.github_id,
-      github_token: user.github_token,
-      username: user.username,
-      email: user.email,
-      avatar_url: user.avatar_url,
-      github_repo: user.github_repo,
-    };
   }
 
   /**
    * Generate access token
    */
   private generateTokens(user: User): AuthTokens {
-    // Simple token generation (in production, use proper JWT)
-    const token = `token_${user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const expires = new Date();
-    expires.setDate(expires.getDate() + 7); // 7 days
-
-    tokenStore.set(token, {
-      userId: user.id,
-      expires,
-    });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
     return {
       access_token: token,
@@ -299,7 +281,8 @@ export class AuthService {
    * Logout user (invalidate token)
    */
   logout(token: string): void {
-    tokenStore.delete(token);
+    // JWTs are stateless, we can't easily invalidate without a redis blacklist.
+    // The client will delete the cookie.
   }
 
   /**
