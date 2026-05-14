@@ -3,25 +3,29 @@ import { authService } from '$lib/server/auth';
 import { initializeDatabase } from '$lib/db/turso';
 import { env } from '$env/dynamic/private';
 
-// Track initialization state
-let dbInitialized = false;
+// Track initialization state with a Promise to prevent race conditions
+let initPromise: Promise<boolean> | null = null;
 
 async function ensureDb() {
-  if (dbInitialized) return true;
+  if (initPromise) return initPromise;
   
   if (!env.TURSO_DATABASE_URL && process.env.VERCEL) {
     console.error('❌ FATAL: TURSO_DATABASE_URL is not set in Vercel environment variables!');
     return false;
   }
   
-  try {
-    await initializeDatabase();
-    dbInitialized = true;
-    return true;
-  } catch (err) {
-    console.error('❌ CRITICAL: Failed to initialize database schema:', err);
-    return false;
-  }
+  initPromise = (async () => {
+    try {
+      await initializeDatabase();
+      return true;
+    } catch (err) {
+      console.error('❌ CRITICAL: Failed to initialize database schema:', err);
+      initPromise = null; // Allow retrying on failure
+      return false;
+    }
+  })();
+  
+  return initPromise;
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
