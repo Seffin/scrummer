@@ -18,6 +18,9 @@ const SCOPES = env.GITHUB_OAUTH_SCOPES || env.VITE_GITHUB_OAUTH_SCOPES || proces
  */
 export const POST: RequestHandler = async ({ request }) => {
 	// Validate configuration
+	console.log(`🔐 [OAuth Server] Using Client ID: ${CLIENT_ID ? CLIENT_ID.substring(0, 4) + '...' : 'MISSING'}`);
+	console.log(`🔐 [OAuth Server] Using Scopes: ${SCOPES}`);
+
 	if (!CLIENT_ID) {
 		console.error('🔐 [OAuth Server] GITHUB_OAUTH_CLIENT_ID not configured');
 		return json(
