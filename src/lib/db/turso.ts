@@ -6,11 +6,14 @@ const getDbConfig = () => {
   const url = env.TURSO_DATABASE_URL;
   const token = env.TURSO_AUTH_TOKEN;
   
-  if (!url) {
-    throw new Error('❌ FATAL: TURSO_DATABASE_URL is missing! Please set it in your .env file to use the Cloud Database.');
+  if (!url && process.env.NODE_ENV === 'production') {
+    throw new Error('❌ FATAL: TURSO_DATABASE_URL is missing in production environment!');
   }
   
-  return { url, token };
+  return { 
+    url: url || 'file:local.db', 
+    token 
+  };
 };
 
 const config = getDbConfig();
@@ -70,15 +73,20 @@ export async function initializeDatabase() {
   ];
 
   console.log('[Turso] Database initialization started...');
-  for (const statement of schemaStatements) {
-    try {
-      await turso.execute(statement);
-    } catch (err) {
-      // Ignore errors for existing columns
-      if (!(err instanceof Error && err.message.includes('duplicate column name'))) {
-        console.warn(`[Turso] Statement warning (might be safe): ${statement.substring(0, 50)}...`, err instanceof Error ? err.message : err);
+  try {
+    for (const statement of schemaStatements) {
+      try {
+        await turso.execute(statement);
+      } catch (err) {
+        // Ignore errors for existing columns or tables
+        if (!(err instanceof Error && (err.message.includes('duplicate column name') || err.message.includes('already exists')))) {
+          console.warn(`[Turso] Statement warning (might be safe): ${statement.substring(0, 50)}...`, err instanceof Error ? err.message : err);
+        }
       }
     }
+  } catch (initError) {
+    console.error('❌ [Turso] Schema initialization failed:', initError);
+    // Don't rethrow, let the app try to continue
   }
 
   // Migration: Add 'queued' to timer_sessions status check if not present

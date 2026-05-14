@@ -98,47 +98,64 @@ export class DatabaseService {
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
-    const result = await turso.execute({
-      sql: 'SELECT * FROM users WHERE username = ? ORDER BY created_at DESC LIMIT 1',
-      args: this.sanitizeArgs([username])
-    });
-    return result.rows[0] as User || null;
+    try {
+      const result = await turso.execute({
+        sql: 'SELECT * FROM users WHERE username = ? ORDER BY created_at DESC LIMIT 1',
+        args: this.sanitizeArgs([username])
+      });
+      return result.rows[0] as User || null;
+    } catch (error) {
+      console.error(`[DatabaseService] Error in getUserByUsername(${username}):`, error);
+      throw error;
+    }
   }
 
   async getUserById(id: number | undefined | null): Promise<User | null> {
     if (id === undefined || id === null || typeof id !== 'number') {
       return null;
     }
-    const result = await turso.execute({
-      sql: 'SELECT * FROM users WHERE id = ?',
-      args: this.sanitizeArgs([id])
-    });
-
-    return result.rows[0] as User || null;
+    try {
+      const result = await turso.execute({
+        sql: 'SELECT * FROM users WHERE id = ?',
+        args: this.sanitizeArgs([id])
+      });
+      return result.rows[0] as User || null;
+    } catch (error) {
+      console.error(`[DatabaseService] Error in getUserById(${id}):`, error);
+      throw error;
+    }
   }
 
   async getUserByGithubId(githubId: string): Promise<User | null> {
     if (!githubId) {
       return null;
     }
-    const result = await turso.execute({
-      sql: 'SELECT * FROM users WHERE github_id = ?',
-      args: this.sanitizeArgs([githubId])
-    });
-
-    return result.rows[0] as User || null;
+    try {
+      const result = await turso.execute({
+        sql: 'SELECT * FROM users WHERE github_id = ?',
+        args: this.sanitizeArgs([githubId])
+      });
+      return result.rows[0] as User || null;
+    } catch (error) {
+      console.error(`[DatabaseService] Error in getUserByGithubId(${githubId}):`, error);
+      throw error;
+    }
   }
 
   async getUserByGoogleId(googleId: string): Promise<User | null> {
     if (!googleId) {
       return null;
     }
-    const result = await turso.execute({
-      sql: 'SELECT * FROM users WHERE google_id = ?',
-      args: this.sanitizeArgs([googleId])
-    });
-
-    return result.rows[0] as User || null;
+    try {
+      const result = await turso.execute({
+        sql: 'SELECT * FROM users WHERE google_id = ?',
+        args: this.sanitizeArgs([googleId])
+      });
+      return result.rows[0] as User || null;
+    } catch (error) {
+      console.error(`[DatabaseService] Error in getUserByGoogleId(${googleId}):`, error);
+      throw error;
+    }
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
@@ -176,67 +193,83 @@ export class DatabaseService {
   async createTimerSession(sessionData: Omit<TimerSession, 'id' | 'created_at' | 'updated_at'>): Promise<TimerSession> {
     const now = new Date().toISOString();
     console.log('[DatabaseService] Creating timer session for user:', sessionData.user_id);
-    const result = await turso.execute({
-      sql: `
-        INSERT INTO timer_sessions (user_id, client, project, task, status, start_time, end_time, duration_seconds, device_info, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      args: this.sanitizeArgs([
-        sessionData.user_id,
-        sessionData.client,
-        sessionData.project,
-        sessionData.task,
-        sessionData.status,
-        sessionData.start_time,
-        sessionData.end_time || null,
-        sessionData.duration_seconds,
-        sessionData.device_info,
-        now,
-        now
-      ])
-    });
+    try {
+      const result = await turso.execute({
+        sql: `
+          INSERT INTO timer_sessions (user_id, client, project, task, status, start_time, end_time, duration_seconds, device_info, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        args: this.sanitizeArgs([
+          sessionData.user_id,
+          sessionData.client,
+          sessionData.project,
+          sessionData.task,
+          sessionData.status,
+          sessionData.start_time,
+          sessionData.end_time || null,
+          sessionData.duration_seconds,
+          sessionData.device_info,
+          now,
+          now
+        ])
+      });
 
-    // In SQLite, last_insert_rowid() is the way to get the ID if RETURNING is not used
-    const lastId = Number(result.lastInsertRowid);
-    const session = await this.getTimerSession(lastId);
-    if (!session) throw new Error('Failed to retrieve created timer session');
-    return session;
+      const lastId = Number(result.lastInsertRowid);
+      const session = await this.getTimerSession(lastId);
+      if (!session) throw new Error('Failed to retrieve created timer session');
+      return session;
+    } catch (error) {
+      console.error('[DatabaseService] Error in createTimerSession:', error);
+      throw error;
+    }
   }
 
   async getTimerSession(id: number): Promise<TimerSession | null> {
     if (id === undefined || id === null) {
       return null;
     }
-    const result = await turso.execute({
-      sql: 'SELECT * FROM timer_sessions WHERE id = ?',
-      args: this.sanitizeArgs([id])
-    });
-
-    return result.rows[0] as TimerSession || null;
+    try {
+      const result = await turso.execute({
+        sql: 'SELECT * FROM timer_sessions WHERE id = ?',
+        args: this.sanitizeArgs([id])
+      });
+      return result.rows[0] as TimerSession || null;
+    } catch (error) {
+      console.error(`[DatabaseService] Error in getTimerSession(${id}):`, error);
+      throw error;
+    }
   }
 
   async getActiveTimerForUser(userId: number | undefined | null): Promise<TimerSession | null> {
     if (userId === undefined || userId === null || typeof userId !== 'number') {
       return null;
     }
-    const result = await turso.execute({
-      sql: "SELECT * FROM timer_sessions WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
-      args: this.sanitizeArgs([userId])
-    });
-
-    return result.rows[0] as TimerSession || null;
+    try {
+      const result = await turso.execute({
+        sql: "SELECT * FROM timer_sessions WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+        args: this.sanitizeArgs([userId])
+      });
+      return result.rows[0] as TimerSession || null;
+    } catch (error) {
+      console.error(`[DatabaseService] Error in getActiveTimerForUser(${userId}):`, error);
+      throw error;
+    }
   }
 
   async getTimerSessionsForUser(userId: number, limit = 50): Promise<TimerSession[]> {
     if (userId === undefined || userId === null) {
       return [];
     }
-    const result = await turso.execute({
-      sql: 'SELECT * FROM timer_sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
-      args: this.sanitizeArgs([userId, limit])
-    });
-
-    return result.rows as TimerSession[];
+    try {
+      const result = await turso.execute({
+        sql: 'SELECT * FROM timer_sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+        args: this.sanitizeArgs([userId, limit])
+      });
+      return result.rows as TimerSession[];
+    } catch (error) {
+      console.error(`[DatabaseService] Error in getTimerSessionsForUser(${userId}):`, error);
+      throw error;
+    }
   }
 
   async updateTimerSession(id: number, updates: Partial<Omit<TimerSession, 'id' | 'created_at' | 'updated_at'>>): Promise<TimerSession | null> {
@@ -252,41 +285,50 @@ export class DatabaseService {
     const now = new Date().toISOString();
 
     console.log('[DatabaseService] Updating timer session:', id);
-    await turso.execute({
-      sql: `
-        UPDATE timer_sessions 
-        SET ${setClause}, updated_at = ?
-        WHERE id = ?
-      `,
-      args: this.sanitizeArgs([...values, now, id])
-    });
-
-    return await this.getTimerSession(id);
+    try {
+      await turso.execute({
+        sql: `
+          UPDATE timer_sessions 
+          SET ${setClause}, updated_at = ?
+          WHERE id = ?
+        `,
+        args: this.sanitizeArgs([...values, now, id])
+      });
+      return await this.getTimerSession(id);
+    } catch (error) {
+      console.error(`[DatabaseService] Error in updateTimerSession(${id}):`, error);
+      throw error;
+    }
   }
 
   // Timer event methods
   async createTimerEvent(eventData: Omit<TimerEvent, 'id'>): Promise<TimerEvent> {
     console.log('[DatabaseService] Creating timer event for session:', eventData.session_id);
-    const result = await turso.execute({
-      sql: `
-        INSERT INTO timer_events (session_id, event_type, timestamp, device_info, metadata)
-        VALUES (?, ?, ?, ?, ?)
-      `,
-      args: this.sanitizeArgs([
-        eventData.session_id,
-        eventData.event_type,
-        eventData.timestamp,
-        eventData.device_info,
-        eventData.metadata || null
-      ])
-    });
+    try {
+      const result = await turso.execute({
+        sql: `
+          INSERT INTO timer_events (session_id, event_type, timestamp, device_info, metadata)
+          VALUES (?, ?, ?, ?, ?)
+        `,
+        args: this.sanitizeArgs([
+          eventData.session_id,
+          eventData.event_type,
+          eventData.timestamp,
+          eventData.device_info,
+          eventData.metadata || null
+        ])
+      });
 
-    const lastId = Number(result.lastInsertRowid);
-    const result2 = await turso.execute({
-      sql: 'SELECT * FROM timer_events WHERE id = ?',
-      args: this.sanitizeArgs([lastId])
-    });
-    return result2.rows[0] as TimerEvent;
+      const lastId = Number(result.lastInsertRowid);
+      const result2 = await turso.execute({
+        sql: 'SELECT * FROM timer_events WHERE id = ?',
+        args: this.sanitizeArgs([lastId])
+      });
+      return result2.rows[0] as TimerEvent;
+    } catch (error) {
+      console.error('[DatabaseService] Error in createTimerEvent:', error);
+      throw error;
+    }
   }
 
   async getTimerEventsForSession(sessionId: number): Promise<TimerEvent[]> {

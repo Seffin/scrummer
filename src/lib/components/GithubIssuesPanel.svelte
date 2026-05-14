@@ -133,6 +133,10 @@
 		timerStore.startFromGithubIssue(issue);
 	}
 
+	function queueFromIssue(issue: GithubIssue) {
+		timerStore.queueFromGithubIssue(issue);
+	}
+
 	async function loadOwners() {
 		console.log('📋 Loading owners, authenticated:', isAuthenticated);
 		if (!isAuthenticated) {
@@ -585,13 +589,22 @@
 										<span>🔗</span> <span class="hidden sm:inline">Open</span>
 									</a>
 									{#if !timer}
-										<button
-											aria-label={`Start #${issue.number}`}
-											class="flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0"
-											onclick={() => startFromIssue(issue)}
-										>
-											<span>▶️</span> Start
-										</button>
+										<div class="flex flex-1 sm:flex-none items-center gap-2">
+											<button
+												aria-label={`Start #${issue.number}`}
+												class="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0"
+												onclick={() => startFromIssue(issue)}
+											>
+												<span>▶️</span> Start
+											</button>
+											<button
+												aria-label={`Queue #${issue.number}`}
+												class="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+												onclick={() => queueFromIssue(issue)}
+											>
+												<span>📥</span> Queue
+											</button>
+										</div>
 									{:else if timer.running}
 										<div class="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2">
 											<span
@@ -620,21 +633,21 @@
 									{:else}
 										<div class="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2">
 											<span
-												class="flex items-center gap-1 rounded-lg bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-400"
+												class="flex items-center gap-1 rounded-lg {timer.status === 'paused' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'} px-2 py-1 text-[11px] font-bold"
 											>
-												⏸️ {formatDuration(timer.elapsedSeconds)}
+												{timer.status === 'paused' ? '⏸️' : '📥'} {formatDuration(timer.elapsedSeconds)}
 											</span>
 											<div class="flex items-center gap-2">
 												<button
 													class="rounded-xl bg-indigo-600 p-2 text-white transition-colors hover:bg-indigo-500"
-													onclick={() => timerStore.resume()}
+													onclick={() => timerStore.resume(timer.id)}
 													title="Resume"
 												>
 													▶️
 												</button>
 												<button
 													class="rounded-xl bg-emerald-600 p-2 text-white transition-colors hover:bg-emerald-500"
-													onclick={() => timerStore.complete()}
+													onclick={() => timerStore.complete(timer.id)}
 													title="Complete"
 												>
 													✅

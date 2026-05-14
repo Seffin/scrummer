@@ -191,6 +191,11 @@ function createTimerStore() {
 		await start('GitHub', 'Issues', taskTitle);
 	}
 
+	async function queueFromGithubIssue(issue: { number: number; title: string }) {
+		const taskTitle = `#${issue.number} ${issue.title}`.trim();
+		await addToQueue('GitHub', 'Issues', taskTitle);
+	}
+
 	async function pause(id?: string | number) {
 		const targetId = id || activeTimer?.id;
 		if (!targetId) return;
@@ -347,6 +352,7 @@ function createTimerStore() {
 		start,
 		addToQueue,
 		startFromGithubIssue,
+		queueFromGithubIssue,
 		pause,
 		resume,
 		complete,
@@ -378,15 +384,17 @@ function createTimerStore() {
 				return { 
 					id: activeTimer.id, 
 					running: activeTimer.status === 'active' || activeTimer.status === 'In Progress',
-					elapsedSeconds: store.elapsedSeconds
+					elapsedSeconds: store.elapsedSeconds,
+					status: activeTimer.status
 				};
 			}
-			const paused = sessions.find(s => s && s.client === 'GitHub' && s.project === 'Issues' && s.task.startsWith(prefix) && s.status === 'paused');
-			if (paused) {
+			const other = sessions.find(s => s && s.client === 'GitHub' && s.project === 'Issues' && s.task.startsWith(prefix) && (s.status === 'paused' || s.status === 'queued'));
+			if (other) {
 				return { 
-					id: paused.id, 
+					id: other.id, 
 					running: false, 
-					elapsedSeconds: paused.durationSeconds || 0
+					elapsedSeconds: other.durationSeconds || 0,
+					status: other.status
 				};
 			}
 			return undefined;
