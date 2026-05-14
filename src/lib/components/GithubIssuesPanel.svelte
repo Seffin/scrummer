@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { GithubIssue } from '$lib/github/types';
 	import { timerStore } from '$lib/stores/timer.svelte';
 	import { githubStore } from '$lib/stores/github.svelte';
@@ -68,21 +68,23 @@
 	// Automatically load data when authenticated
 	$effect(() => {
 		if (isAuthenticated) {
-			console.log('🚀 Authenticated, loading data...');
-			loginState = { isShowing: false, isLoading: false };
-			authError = '';
-			loadOwners();
-			loadUserRepos();
+			untrack(() => {
+				console.log('🚀 Authenticated, loading data...');
+				loginState = { isShowing: false, isLoading: false };
+				authError = '';
+				loadOwners();
+				loadUserRepos();
 
-			// Initialize owner/repo from user settings if available
-			if (authStore.user?.github_repo && !owner && !repo) {
-				const parts = authStore.user.github_repo.split('/');
-				if (parts.length === 2) {
-					owner = parts[0];
-					repo = parts[1];
-					void loadIssues();
+				// Initialize owner/repo from user settings if available
+				if (authStore.user?.github_repo && !owner && !repo) {
+					const parts = authStore.user.github_repo.split('/');
+					if (parts.length === 2) {
+						owner = parts[0];
+						repo = parts[1];
+						void loadIssues();
+					}
 				}
-			}
+			});
 		} else {
 			loginState = showLoginPrompt();
 		}
@@ -225,8 +227,20 @@
 		
 		try {
 			const userRepos = (await getUserRepos()) as any[];
+			
 			// Extract repo names from GitHub API response
 			repos = userRepos.map((r) => r.name || '').filter(Boolean);
+			
+			// Brilliant fallback: Extract owners/orgs from the user's repositories
+			// This works even if the token lacks read:org scopes or hits SSO restrictions!
+			const extractedOwners = new Set(owners);
+			userRepos.forEach(r => {
+				if (r.owner?.login) {
+					extractedOwners.add(r.owner.login);
+				}
+			});
+			owners = Array.from(extractedOwners).sort((a, b) => a.localeCompare(b));
+			
 			errorSource = null;
 		} catch (e: any) {
 			if (e instanceof GitHubAuthError || e.message?.includes('401') || e.message?.includes('Unauthorized')) {
