@@ -65,15 +65,17 @@
 
 	const displayedIssues = $derived(issues.length > 0 ? issues : githubStore.filteredIssues);
 
-	// Automatically load data when authenticated
+	// Automatically load data when authenticated (sequential to avoid race condition)
 	$effect(() => {
 		if (isAuthenticated) {
-			untrack(() => {
+			untrack(async () => {
 				console.log('🚀 Authenticated, loading data...');
 				loginState = { isShowing: false, isLoading: false };
 				authError = '';
-				loadOwners();
-				loadUserRepos();
+
+				// Run sequentially: loadUserRepos merges with owners set by loadOwners
+				await loadOwners();
+				await loadUserRepos();
 
 				// Initialize owner/repo from user settings if available
 				if (authStore.user?.github_repo && !owner && !repo) {
@@ -121,13 +123,7 @@
 		console.log('🔄 Auth state changed:', { isAuthenticated, loginState, errorSource });
 	});
 		
-	// Force logout if there are authentication errors
-	$effect(() => {
-		if (errorSource === 'owners' || errorSource === 'repos') {
-			console.log('🔄 Authentication error detected, triggering logout');
-			githubAuthStore.logout();
-		}
-	});
+
 
 	function formatDisplayDate(iso: string | null): string {
 		if (!iso) return 'n/a';
@@ -207,16 +203,16 @@
 			errorSource = null;
 		} catch (e: any) {
 			console.error('📋 Error loading owners:', e);
-			if (e instanceof GitHubAuthError || e.message?.includes('401') || e.message?.includes('Unauthorized')) {
-				console.log('📋 Authentication error detected, forcing re-authentication');
+			// Only force re-auth on a true 401, not permission/scope errors (e.g. fine-grained PATs lacking read:org)
+			if (e instanceof GitHubAuthError && e.statusCode === 401) {
+				console.log('📋 True 401 detected, forcing re-authentication');
 				githubStore.setError('GitHub authentication failed. Please check your token.');
-				// Force re-authentication
 				githubAuthStore.logout();
 				authError = 'Your GitHub token is invalid or expired. Please authenticate again.';
 			} else {
-				githubStore.setError(e?.message ?? 'Failed to load owner options');
+				// Non-fatal error (e.g. no read:org scope) — continue without orgs
+				console.warn('📋 Could not load orgs (likely no read:org scope), continuing without them.');
 			}
-			errorSource = 'owners';
 		} finally {
 			loadingOptions = false;
 		}

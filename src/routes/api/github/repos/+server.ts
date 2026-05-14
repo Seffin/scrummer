@@ -11,7 +11,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     }
     const owner = url.searchParams.get('owner');
     if (!owner) {
-      const { response, data } = await githubProxyFetch('/user/repos?per_page=100', user.github_token);
+      const { response, data } = await githubProxyFetch(
+        '/user/repos?per_page=100&affiliation=owner,collaborator,organization_member&sort=updated',
+        user.github_token
+      );
       return json(data, { status: response.status });
     }
 
