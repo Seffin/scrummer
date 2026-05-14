@@ -20,6 +20,14 @@
 		if (authStore.isAuthenticated) {
 			goto('/');
 		}
+
+		// Check backend health
+		try {
+			const res = await fetch('/health', { signal: AbortSignal.timeout(4000) });
+			backendOnline = res.ok;
+		} catch {
+			backendOnline = false;
+		}
 		
 		// Setup device flow status listener
 		deviceFlowService.onStatusChange = (status: string, tokenData?: any) => {
@@ -136,14 +144,23 @@
 						</svg>
 					</div>
 					<h1 class="text-3xl font-bold text-white tracking-tight">WorkTrack</h1>
-					<div class="flex items-center justify-center gap-2 mt-2">
-						<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/50 border border-slate-700/50">
-							<div class="w-1.5 h-1.5 rounded-full {backendOnline === true ? 'bg-emerald-500 animate-pulse' : backendOnline === false ? 'bg-red-500' : 'bg-slate-500'}"></div>
-							<span class="text-[10px] uppercase tracking-wider font-bold {backendOnline === true ? 'text-emerald-400' : backendOnline === false ? 'text-red-400' : 'text-slate-500'}">
-								{backendOnline === true ? 'Server Online' : backendOnline === false ? 'Server Offline' : 'Checking Server...'}
-							</span>
+					{#if backendOnline !== null}
+						<div class="flex items-center justify-center gap-2 mt-2">
+							<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/50 border border-slate-700/50">
+								<div class="w-1.5 h-1.5 rounded-full {backendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}"></div>
+								<span class="text-[10px] uppercase tracking-wider font-bold {backendOnline ? 'text-emerald-400' : 'text-red-400'}">
+									{backendOnline ? 'Server Online' : 'Server Offline'}
+								</span>
+							</div>
 						</div>
-					</div>
+					{:else}
+						<div class="flex items-center justify-center gap-2 mt-2">
+							<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/50 border border-slate-700/50">
+								<div class="w-1.5 h-1.5 rounded-full bg-slate-500 animate-pulse"></div>
+								<span class="text-[10px] uppercase tracking-wider font-bold text-slate-500">Checking...</span>
+							</div>
+						</div>
+					{/if}
 					<p class="text-slate-400 mt-3">{isRegister ? 'Create your account' : 'Welcome back'}</p>
 				</div>
 
