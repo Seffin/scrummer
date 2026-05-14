@@ -234,7 +234,7 @@ export function createAuthStore() {
 		// Clear disconnected flag on full logout
 		githubDisconnected = false;
 		if (browser) localStorage.setItem('github_disconnected', 'false');
-		console.log('[AuthStore] Logged out, GitHub token revoked from all devices');
+		console.log('[AuthStore] Logged out of application');
 	}
 
 	async function logoutGitHub() {

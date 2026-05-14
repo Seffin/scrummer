@@ -153,8 +153,8 @@
 		connectingPat = true;
 		authError = '';
 		try {
-			// Basic validation via our endpoint
-			const res = await fetch('/api/github/user', {
+			// Validate token against rate_limit API (requires no scopes, supports CORS)
+			const res = await fetch('https://api.github.com/rate_limit', {
 				headers: { 'Authorization': `Bearer ${token}` }
 			});
 			if (!res.ok) {

@@ -10,8 +10,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     const user = authService.getCurrentUser(locals as App.Locals);
 
     if (token && user) {
-      await authService.logoutWithGitHubRevoke(token, user);
-      console.log('[API] Token and GitHub token revoked successfully');
+      authService.logout(token);
+      console.log('[API] User logged out successfully');
     }
 
     return json({ message: 'Logged out successfully' });
