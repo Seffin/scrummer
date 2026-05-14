@@ -156,6 +156,36 @@ function createTimerStore() {
 		}
 	}
 
+	async function addToQueue(client: string, project: string, task: string) {
+		isLoading = true;
+		error = null;
+
+		// Update local metadata
+		const c = client.trim();
+		const p = project.trim();
+		const t = task.trim();
+
+		if (c && !clients.includes(c)) clients = [...clients, c];
+		if (c && p) {
+			const existing = projects[c] ?? [];
+			if (!existing.includes(p)) projects[c] = [...existing, p];
+			const key = `${c}::${p}`;
+			const tasks = knownTasks[key] ?? [];
+			if (t && !tasks.includes(t)) knownTasks[key] = [...tasks, t];
+		}
+		saveMetadata();
+
+		try {
+			const deviceInfo = { browser: navigator.userAgent, platform: navigator.platform };
+			await timerApi.queue(c, p, t, deviceInfo);
+			await sync();
+		} catch (e: any) {
+			error = e.message;
+		} finally {
+			isLoading = false;
+		}
+	}
+
 	async function startFromGithubIssue(issue: { number: number; title: string }) {
 		const taskTitle = `#${issue.number} ${issue.title}`.trim();
 		await start('GitHub', 'Issues', taskTitle);
@@ -286,7 +316,7 @@ function createTimerStore() {
 		get knownTasks() { return knownTasks; },
 		
 		get pausedTimers() {
-			return sessions.filter(s => s && s.status === 'paused');
+			return sessions.filter(s => s && (s.status === 'paused' || s.status === 'queued'));
 		},
 
 		get totalTodaySeconds() {
@@ -315,6 +345,7 @@ function createTimerStore() {
 		},
 		sync,
 		start,
+		addToQueue,
 		startFromGithubIssue,
 		pause,
 		resume,

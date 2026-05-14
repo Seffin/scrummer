@@ -21,7 +21,7 @@ export interface TimerSession {
   client: string;
   project: string;
   task: string;
-  status: 'active' | 'paused' | 'completed';
+  status: 'active' | 'paused' | 'completed' | 'queued';
   start_time: string;
   end_time?: string;
   duration_seconds: number;

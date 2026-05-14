@@ -1,6 +1,6 @@
 import { apiFetch } from './client';
 
-export type TaskStatus = 'Pending' | 'In Progress' | 'On Hold' | 'Completed' | 'active' | 'paused' | 'completed';
+export type TaskStatus = 'Pending' | 'In Progress' | 'On Hold' | 'Completed' | 'active' | 'paused' | 'completed' | 'queued';
 
 export interface TimerDTO {
 	id: number | string;
@@ -21,6 +21,12 @@ export const timerApi = {
 
 	start: (client: string, project: string, task: string, deviceInfo: object) => 
 		apiFetch<{ timer: TimerDTO }>('/timer/start', {
+			method: 'POST',
+			body: JSON.stringify({ client, project, task, device_info: deviceInfo })
+		}),
+
+	queue: (client: string, project: string, task: string, deviceInfo: object) => 
+		apiFetch<{ timer: TimerDTO }>('/timer/queue', {
 			method: 'POST',
 			body: JSON.stringify({ client, project, task, device_info: deviceInfo })
 		}),

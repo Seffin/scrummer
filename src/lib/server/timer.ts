@@ -65,6 +65,27 @@ export class TimerService {
   }
 
   /**
+   * Add a task to the queue without starting the timer
+   */
+  async queueTimer(user: AuthUser, request: CreateTimerRequest): Promise<TimerSession> {
+    const now = new Date().toISOString();
+
+    // Create new queued session
+    const session = await db.createTimerSession({
+      user_id: user.id,
+      client: request.client,
+      project: request.project,
+      task: request.task,
+      status: 'queued',
+      start_time: now,
+      duration_seconds: 0,
+      device_info: JSON.stringify(request.device_info),
+    });
+
+    return session;
+  }
+
+  /**
    * Pause an active timer
    */
   async pauseTimer(user: AuthUser, sessionId: number, deviceInfo: Record<string, any>): Promise<TimerSession> {
@@ -121,8 +142,8 @@ export class TimerService {
       throw new Error('Timer session not found or access denied');
     }
 
-    if (session.status !== 'paused') {
-      throw new Error('Timer is not paused');
+    if (session.status !== 'paused' && session.status !== 'queued') {
+      throw new Error('Timer is not paused or queued');
     }
 
     // Check if user has another active timer

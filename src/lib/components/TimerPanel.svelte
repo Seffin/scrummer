@@ -16,8 +16,13 @@
 	let showNewTaskForm = $state(false);
 
 	async function handleAddPending() {
-		if (!clientInput.trim() || !projectInput.trim() || !taskInput.trim()) return;
-		await timerStore.start(clientInput, projectInput, taskInput);
+		const task = taskInput.trim();
+		if (!task) return;
+		
+		const client = clientInput.trim() || 'General';
+		const project = projectInput.trim() || 'General';
+		
+		await timerStore.addToQueue(client, project, task);
 		clientInput = '';
 		projectInput = '';
 		taskInput = '';
@@ -252,6 +257,14 @@
 						>
 							▶️ Start Timer
 						</button>
+						<button
+							type="button"
+							onclick={handleAddPending}
+							disabled={!taskInput.trim()}
+							class="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 disabled:pointer-events-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+						>
+							📥 Add to Queue
+						</button>
 					</div>
 					</div>
 				</div>
@@ -271,7 +284,11 @@
 								</div>
 								<div class="mt-0.5 flex items-center gap-2">
 									<span class="text-sm font-semibold text-slate-800 dark:text-slate-100">{taskItem.task}</span>
-									<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">Paused</span>
+									{#if taskItem.status === 'paused'}
+										<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">Paused</span>
+									{:else if taskItem.status === 'queued'}
+										<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">Queued</span>
+									{/if}
 								</div>
 							</div>
 							<div class="flex items-center justify-between gap-4 sm:justify-end">
