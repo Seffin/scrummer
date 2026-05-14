@@ -5,7 +5,7 @@
 	import { githubStore } from '$lib/stores/github.svelte';
 	import { GitHubAuthError, getUserProfile, getUserOrgs, getUserRepos, getRepoIssues, githubGet } from '$lib/github/api';
 	import { handleLogout, showLoginPrompt, type LoginState } from '$lib/github/login-flow';
-	import { getAuthState } from '$lib/github/auth';
+	import { getAuthState, validateGitHubTokenFormat } from '$lib/github/auth';
 	import GithubIssueCreateModal from './GithubIssueCreateModal.svelte';
 	import DeviceAuthModal from './DeviceAuthModal.svelte';
 	import { formatDuration } from '$lib/utils/timeUtils';
@@ -18,6 +18,11 @@
 	const isAuthenticated = $derived(githubAuthStore.isAuthenticated);
 	let loginState = $state<LoginState>({ isShowing: false, isLoading: false });
 	let authError = $state('');
+
+	// Dual authentication state
+	let authMethod: 'oauth' | 'pat' = $state('oauth');
+	let patInput = $state('');
+	let connectingPat = $state(false);
 	let showDeviceAuthModal = $state(false);
 	let githubDisconnectedNotification = $state(false);
 
@@ -135,6 +140,30 @@
 
 	function queueFromIssue(issue: GithubIssue) {
 		timerStore.queueFromGithubIssue(issue);
+	}
+
+	async function handlePatSubmit() {
+		const token = patInput.trim();
+		if (!validateGitHubTokenFormat(token)) {
+			authError = 'Invalid Personal Access Token format. It should start with ghp_, gho_, or github_pat_.';
+			return;
+		}
+		connectingPat = true;
+		authError = '';
+		try {
+			// Basic validation via our endpoint
+			const res = await fetch('/api/github/user', {
+				headers: { 'Authorization': `Bearer ${token}` }
+			});
+			if (!res.ok) {
+				throw new Error('Token validation failed. Is it correct and not expired?');
+			}
+			githubAuthStore.authenticate(token);
+		} catch (e: any) {
+			authError = e.message || 'Failed to authenticate with PAT.';
+		} finally {
+			connectingPat = false;
+		}
 	}
 
 	async function loadOwners() {
@@ -329,24 +358,69 @@
 				{/if}
 
 				<div class="space-y-4">
-					<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+					<!-- Authentication Method Toggle -->
+					<div class="mb-6 flex space-x-1 rounded-xl bg-slate-100/50 p-1 dark:bg-slate-800/50">
 						<button
-							class="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-							onclick={() => (showDeviceAuthModal = true)}
+							class="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all {authMethod === 'oauth' ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}"
+							onclick={() => (authMethod = 'oauth')}
 						>
-							<span>📱</span>
-							Authenticate with GitHub
+							Quick Login (OAuth)
+						</button>
+						<button
+							class="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all {authMethod === 'pat' ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}"
+							onclick={() => (authMethod = 'pat')}
+						>
+							Personal Access Token
 						</button>
 					</div>
 
-					<div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700/50 dark:bg-slate-800/50">
-						<h3 class="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">How this works:</h3>
-						<ol class="list-decimal list-inside space-y-1 text-xs text-slate-600 dark:text-slate-400">
-							<li>Authentication is securely handled via GitHub Device Flow OAuth.</li>
-							<li>Your authentication is securely scoped to this specific device.</li>
-							<li>You will remain logged in until you explicitly click Logout.</li>
-						</ol>
-					</div>
+					{#if authMethod === 'oauth'}
+						<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+							<button
+								class="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+								onclick={() => (showDeviceAuthModal = true)}
+							>
+								<span>📱</span>
+								Authenticate with GitHub
+							</button>
+						</div>
+
+						<div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700/50 dark:bg-slate-800/50">
+							<h3 class="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">How this works:</h3>
+							<ol class="list-decimal list-inside space-y-1 text-xs text-slate-600 dark:text-slate-400">
+								<li>Authentication is securely handled via GitHub Device Flow OAuth.</li>
+								<li>Your authentication is securely scoped to this specific device.</li>
+								<li>You will remain logged in until you explicitly click Logout.</li>
+							</ol>
+						</div>
+					{:else}
+						<div class="flex flex-col gap-3">
+							<input
+								type="password"
+								placeholder="ghp_..."
+								bind:value={patInput}
+								class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700/50 dark:bg-slate-800/50 dark:text-white dark:focus:bg-slate-800"
+							/>
+							<button
+								class="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/40 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+								onclick={handlePatSubmit}
+								disabled={connectingPat || !patInput.trim()}
+							>
+								<span>{connectingPat ? '⏳' : '🔑'}</span>
+								{connectingPat ? 'Connecting...' : 'Connect with PAT'}
+							</button>
+						</div>
+
+						<div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700/50 dark:bg-slate-800/50">
+							<h3 class="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">How to generate a PAT:</h3>
+							<ol class="list-decimal list-inside space-y-1 text-xs text-slate-600 dark:text-slate-400">
+								<li>Go to GitHub Settings &rarr; Developer Settings.</li>
+								<li>Select <strong>Personal access tokens (classic)</strong>.</li>
+								<li>Generate a new token with <code class="rounded bg-slate-200 px-1 py-0.5 dark:bg-slate-700 dark:text-slate-300">repo</code> scopes.</li>
+								<li>Paste the token above to connect.</li>
+							</ol>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
