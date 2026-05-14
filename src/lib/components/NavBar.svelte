@@ -65,7 +65,6 @@
 				{/if}
 				<div class="flex-1 overflow-hidden">
 					<p class="truncate text-xs font-semibold text-slate-900 dark:text-white">{authStore.user?.username || 'User'}</p>
-					<p class="truncate text-[10px] text-slate-500">Free Plan</p>
 				</div>
 				<button 
 					onclick={() => {
