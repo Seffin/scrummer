@@ -51,12 +51,16 @@ export class DeviceFlowService {
 		}
 		
 		try {
+			// Import authStore to get the current app session token
+			const { authStore } = await import('$lib/stores/auth.svelte');
+			
 			// Request device code from server (which proxies to GitHub)
 			const response = await fetch('/api/github/oauth/device-code', {
 				method: 'POST',
 				headers: {
 					'Accept': 'application/json',
 					'Content-Type': 'application/json',
+					'Authorization': authStore.token ? `Bearer ${authStore.token}` : ''
 				},
 				body: JSON.stringify({
 					scope: 'repo read:org'
@@ -148,11 +152,15 @@ export class DeviceFlowService {
 		try {
 			console.log('🔐 Polling for authorization status...');
 			
+			// Import authStore to get the current app session token
+			const { authStore } = await import('$lib/stores/auth.svelte');
+			
 			const response = await fetch('/api/github/oauth/token', {
 				method: 'POST',
 				headers: {
 					'Accept': 'application/json',
 					'Content-Type': 'application/json',
+					'Authorization': authStore.token ? `Bearer ${authStore.token}` : ''
 				},
 				body: JSON.stringify({
 					device_code: this.state.deviceCode

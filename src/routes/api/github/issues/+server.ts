@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     }
     const issuesPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues?per_page=100&state=all`;
     const { response, data } = await githubProxyFetch(issuesPath, user.github_token);
-    return json({ issues: data }, { status: response.status });
+    return json(data, { status: response.status });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'GitHub proxy failed' }, { status: 500 });
   }
