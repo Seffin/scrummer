@@ -3,10 +3,10 @@
  * Implements GitHub's Device Flow for token-based authentication
  */
 
-const CLIENT_ID = import.meta.env.VITE_GITHUB_DEVICE_CLIENT_ID || 'YOUR_CLIENT_ID';
+const CLIENT_ID = 'server-side'; // Client ID is handled server-side only
 
-// Check if CLIENT_ID is properly configured
-const isDeviceFlowConfigured = CLIENT_ID !== 'YOUR_CLIENT_ID';
+// Device flow is always configured since the server handles the client_id
+const isDeviceFlowConfigured = true;
 
 export interface DeviceCodeResponse {
 	device_code: string;

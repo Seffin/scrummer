@@ -7,10 +7,10 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 
-// Server-side OAuth configuration (kept secret)
+// Server-side OAuth configuration (kept secret - never exposed to browser)
 const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';
-const CLIENT_ID = env.GITHUB_OAUTH_CLIENT_ID || env.VITE_GITHUB_DEVICE_CLIENT_ID || process.env.GITHUB_OAUTH_CLIENT_ID || process.env.VITE_GITHUB_DEVICE_CLIENT_ID || '';
-const SCOPES = env.GITHUB_OAUTH_SCOPES || env.VITE_GITHUB_OAUTH_SCOPES || process.env.GITHUB_OAUTH_SCOPES || process.env.VITE_GITHUB_OAUTH_SCOPES || 'repo read:org';
+const CLIENT_ID = env.GITHUB_OAUTH_CLIENT_ID || '';
+const SCOPES = env.GITHUB_OAUTH_SCOPES || 'repo,read:org';
 
 /**
  * POST /api/github/oauth/device-code
